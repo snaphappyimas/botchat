@@ -233,7 +233,7 @@ async function ligarBot() {
 
             console.log('Solicitando resposta à OpenAI...');
             const completion = await openai.chat.completions.create({
-                model: 'gpt-3.5-turbo',
+                model: 'gpt-4o-mini',
                 messages: [
                     { role: 'system', content: PROMPT_BASE },
                     ...historico[remetente].slice(-6)
