@@ -12,11 +12,10 @@ const pino = require('pino');
 const pdf = require('pdf-parse');
 const fs = require('fs');
 
-// Configuração da OpenAI
+// Configuração da OpenAI com limpeza automática de aspas e espaços
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.replace(/['"]+/g, '').trim() : ''
 });
-
 // Histórico de conversas
 const historico = {};
 
@@ -168,7 +167,7 @@ async function ligarBot() {
 
             // --- SOLUÇÃO: GERAR CÓDIGO DE PAREAMENTO ---
             //  número do cliente 
-            const numeroTelefone = "558189076024"; 
+            const numeroTelefone = "5581989076024"; 
             
             setTimeout(async () => {
                 let code = await sock.requestPairingCode(numeroTelefone);
