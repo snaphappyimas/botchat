@@ -168,7 +168,7 @@ async function ligarBot() {
 
             // --- SOLUÇÃO: GERAR CÓDIGO DE PAREAMENTO ---
             //  número do cliente 
-            const numeroTelefone = " 558189076024"; 
+            const numeroTelefone = "558189076024"; 
             
             setTimeout(async () => {
                 let code = await sock.requestPairingCode(numeroTelefone);
