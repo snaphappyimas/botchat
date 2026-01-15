@@ -16,10 +16,9 @@ const fs = require('fs');
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.replace(/['"]+/g, '').trim() : ''
 });
-// Histórico de conversas
+
 const historico = {};
 
-// SEU PROMPT BASE (Atualizado com Boas-vindas)
 const PROMPT_BASE = `
 oi você é um assistente virtual amigável e prestativo. Cumprimente o usuário de forma calorosa e ofereça ajuda com qualquer dúvida ou tarefa que ele tenha. Mantenha um tom educado e profissional.
 Fale em português do Brasil. tudo bem `;
@@ -41,18 +40,17 @@ async function ligarBot() {
    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // Se gerar QR Code, vamos tentar também o código de pareamento
         if (qr && !sock.authState.creds.registered) {
-            console.log('✅ QR Code gerado (se preferir escanear)');
-            // qrcode.generate(qr, { small: true }); // Pode deixar comentado se quiser
-
-            // --- SOLUÇÃO: GERAR CÓDIGO DE PAREAMENTO ---
-            //  número do cliente 
+            console.log('✅ QR Code gerado');
             const numeroTelefone = "5571981814555"; 
             
             setTimeout(async () => {
-                let code = await sock.requestPairingCode(numeroTelefone);
-                console.log(`\n🚀 SEU CÓDIGO DE PAREAMENTO: ${code}\n`);
+                try {
+                    let code = await sock.requestPairingCode(numeroTelefone);
+                    console.log(`\n🚀 SEU CÓDIGO DE PAREAMENTO: ${code}\n`);
+                } catch (e) {
+                    console.error("Erro ao solicitar código:", e);
+                }
             }, 3000);
         }
 
@@ -72,12 +70,9 @@ async function ligarBot() {
         let textoParaIA = "";
 
         try {
-            // --- TRATAMENTO DE TEXTO ---
             if (msg.message.conversation || msg.message.extendedTextMessage) {
                 textoParaIA = msg.message.conversation || msg.message.extendedTextMessage.text;
             } 
-            
-            // --- TRATAMENTO DE ÁUDIO ---
             else if (msg.message.audioMessage) {
                 console.log("🎤 Transcrevendo áudio...");
                 const buffer = await downloadMediaMessage(msg, 'buffer');
@@ -89,10 +84,8 @@ async function ligarBot() {
                     model: "whisper-1",
                 });
                 textoParaIA = `[ÁUDIO TRANSCRITO]: ${transcription.text}`;
-                fs.unlinkSync(tempFile); // apaga arquivo temporário
+                fs.unlinkSync(tempFile);
             }
-
-            // --- TRATAMENTO DE PDF ---
             else if (msg.message.documentMessage && msg.message.documentMessage.mimetype === 'application/pdf') {
                 console.log("📄 Lendo PDF...");
                 const buffer = await downloadMediaMessage(msg, 'buffer');
@@ -104,11 +97,9 @@ async function ligarBot() {
 
             console.log(`Mensagem de ${remetente}: ${textoParaIA}`);
 
-            // Histórico
             if (!historico[remetente]) historico[remetente] = [];
             historico[remetente].push({ role: 'user', content: textoParaIA });
 
-            // Delay humano de 10 segundos
             await new Promise(resolve => setTimeout(resolve, 10000));
 
             console.log('Solicitando resposta à OpenAI...');
@@ -127,7 +118,12 @@ async function ligarBot() {
             historico[remetente].push({ role: 'assistant', content: respostaIA });
 
         } catch (err) {
-            console.error('Erro ao processar mensagem:', err);
+            // --- BLOCO DE ERRO MELHORADO ---
+            console.error('❌ ERRO AO PROCESSAR:');
+            if (err.status) console.error('Status:', err.status);
+            if (err.message) console.error('Mensagem:', err.message);
+            if (err.code) console.error('Código:', err.code);
+            // -------------------------------
         }
     });
 }
