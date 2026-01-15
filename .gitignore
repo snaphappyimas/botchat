@@ -1,0 +1,18 @@
+# Configurações e Chaves
+.env
+
+# WhatsApp Sessão (Segurança)
+pasta_sessao/
+auth_info_baileys/
+
+# Dependências (O servidor instala sozinho)
+node_modules/
+package-lock.json
+
+# Arquivos Temporários de áudio
+temp_*.mp3
+*.tmp
+
+# Logs
+npm-debug.log*
+pm2.log
