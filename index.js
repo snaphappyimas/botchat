@@ -24,7 +24,7 @@ oi você é um assistente virtual amigável e prestativo. Cumprimente o usuário
 Fale em português do Brasil. tudo bem `;
 
 async function ligarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('sessao_final');
+    const { state, saveCreds } = await useMultiFileAuthState('sessao_v25');
 
     const sock = makeWASocket({
         auth: state,
