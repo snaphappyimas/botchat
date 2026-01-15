@@ -145,7 +145,7 @@ Finalize as conversas induzindo ao cliente a marcar algum procedimento espiritua
 `;
 
 async function ligarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('sessao_nova');
+    const { state, saveCreds } = await useMultiFileAuthState('sessao_final');
 
     const sock = makeWASocket({
         auth: state,
