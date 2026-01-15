@@ -158,17 +158,29 @@ async function ligarBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
+   sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-        if (qr) {
-            console.log('✅ Escaneie o QR Code abaixo:');
-            qrcode.generate(qr, { small: true });
+
+        // Se gerar QR Code, vamos tentar também o código de pareamento
+        if (qr && !sock.authState.creds.registered) {
+            console.log('✅ QR Code gerado (se preferir escanear)');
+            // qrcode.generate(qr, { small: true }); // Pode deixar comentado se quiser
+
+            // --- SOLUÇÃO: GERAR CÓDIGO DE PAREAMENTO ---
+            //  número do cliente 
+            const numeroTelefone = " 558189076024"; 
+            
+            setTimeout(async () => {
+                let code = await sock.requestPairingCode(numeroTelefone);
+                console.log(`\n🚀 SEU CÓDIGO DE PAREAMENTO: ${code}\n`);
+            }, 3000);
         }
+
         if (connection === 'close') {
             const erroCode = (lastDisconnect.error instanceof Boom)?.output?.statusCode;
             if (erroCode !== DisconnectReason.loggedOut) ligarBot();
         } else if (connection === 'open') {
-            console.log('🤖 BOT ONLINE - AGORA LENDO ÁUDIO E PDF!');
+            console.log('🤖 BOT ONLINE!');
         }
     });
 
