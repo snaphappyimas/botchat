@@ -11,9 +11,9 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-
-// CONFIGURAÇÕES
-
+// ===============================
+// CONFIG
+// ===============================
 const SESSION_PATH = '/app/sessao_groq';
 
 // garante pasta de sessão
@@ -27,7 +27,7 @@ const groq = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-// histórico simples
+// histórico simples por contato
 const historico = {};
 
 const PROMPT_BASE = `
@@ -44,20 +44,28 @@ async function iniciarBot() {
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
     browser: ['Ubuntu', 'Chrome', '22.0.0']
   });
 
   sock.ev.on('creds.update', saveCreds);
+
+  // 🔑 GERA CÓDIGO DE PAREAMENTO
+  if (!state.creds.registered) {
+    const numero = process.env.PHONE_NUMBER;
+    const code = await sock.requestPairingCode(numero);
+    console.log('📲 CONECTE PELO CELULAR');
+    console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
+  }
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-
       if (reason !== DisconnectReason.loggedOut) {
         console.log('🔄 Reconectando em 5s...');
-        setTimeout(() => iniciarBot(), 5000);
+        setTimeout(iniciarBot, 5000);
       }
     }
 
