@@ -1,136 +1,114 @@
 require('dotenv').config();
-const { 
-    default: makeWASocket, 
-    useMultiFileAuthState, 
-    DisconnectReason, 
-    downloadMediaMessage 
-} = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
-const qrcode = require('qrcode-terminal');
-const OpenAI = require('openai');
-const pino = require('pino');
-const pdf = require('pdf-parse');
 const fs = require('fs');
 
-// Configuração da OpenAI com limpeza automática de aspas e espaços
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.replace(/['"]+/g, '').trim() : ''
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason
+} = require('@whiskeysockets/baileys');
+
+const { Boom } = require('@hapi/boom');
+const pino = require('pino');
+const OpenAI = require('openai');
+
+// ===============================
+// CONFIGURAÇÕES
+// ===============================
+const SESSION_PATH = '/app/sessao_groq';
+
+// garante pasta de sessão
+if (!fs.existsSync(SESSION_PATH)) {
+  fs.mkdirSync(SESSION_PATH, { recursive: true });
+}
+
+// GROQ
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1'
 });
 
+// histórico simples
 const historico = {};
 
 const PROMPT_BASE = `
-oi você é um assistente virtual amigável e prestativo. Cumprimente o usuário de forma calorosa e ofereça ajuda com qualquer dúvida ou tarefa que ele tenha. Mantenha um tom educado e profissional.
-Fale em português do Brasil. tudo bem 
+Você é um assistente virtual amigável e profissional.
+Responda sempre em português do Brasil.
+Cumprimente conforme o horário (bom dia, boa tarde ou boa noite).
+Seja educado, claro e objetivo.
+`;
 
-Regra 
-1. Sempre responda em português do Brasil.
-2. Comece a converça com um bom dia ou boa tarde, ou boa noite dependendo do horário.`;
+// ===============================
+async function iniciarBot() {
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
-async function ligarBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('/app/sessao_nova');
+  const sock = makeWASocket({
+    auth: state,
+    logger: pino({ level: 'silent' }),
+    browser: ['Ubuntu', 'Chrome', '22.0.0']
+  });
 
+  sock.ev.on('creds.update', saveCreds);
 
-    const sock = makeWASocket({
-        auth: state,
-        logger: pino({ level: 'silent' }),
-        browser: ['Ubuntu', 'Chrome', '20.0.0'],
-        connectTimeoutMs: 60000, 
-        defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 30000 
-    });
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
 
-    sock.ev.on('creds.update', saveCreds);
+    if (connection === 'close') {
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
 
-   sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
+      if (reason !== DisconnectReason.loggedOut) {
+        console.log('🔄 Reconectando em 5s...');
+        setTimeout(() => iniciarBot(), 5000);
+      }
+    }
 
-        if (qr && !sock.authState.creds.registered) {
-            console.log('✅ QR Code gerado');
-            const numeroTelefone = "5571981814555"; 
-            
-            setTimeout(async () => {
-                try {
-                    let code = await sock.requestPairingCode(numeroTelefone);
-                    console.log(`\n🚀 SEU CÓDIGO DE PAREAMENTO: ${code}\n`);
-                } catch (e) {
-                    console.error("Erro ao solicitar código:", e);
-                }
-            }, 3000);
-        }
+    if (connection === 'open') {
+      console.log('🤖 BOT ONLINE COM GROQ');
+    }
+  });
 
-        if (connection === 'close') {
-            const erroCode = (lastDisconnect.error instanceof Boom)?.output?.statusCode;
-            if (erroCode !== DisconnectReason.loggedOut) ligarBot();
-        } else if (connection === 'open') {
-            console.log('🤖 BOT ONLINE!');
-        }
-    });
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg?.message || msg.key.fromMe) return;
 
-    sock.ev.on('messages.upsert', async m => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+    const jid = msg.key.remoteJid;
+    const texto =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text;
 
-        const remetente = msg.key.remoteJid;
-        let textoParaIA = "";
+    if (!texto) return;
 
-        try {
-            if (msg.message.conversation || msg.message.extendedTextMessage) {
-                textoParaIA = msg.message.conversation || msg.message.extendedTextMessage.text;
-            } 
-            else if (msg.message.audioMessage) {
-                console.log("🎤 Transcrevendo áudio...");
-                const buffer = await downloadMediaMessage(msg, 'buffer');
-                const tempFile = `./temp_${Date.now()}.mp3`;
-                fs.writeFileSync(tempFile, buffer);
+    console.log(`📩 ${jid}: ${texto}`);
 
-                const transcription = await openai.audio.transcriptions.create({
-                    file: fs.createReadStream(tempFile),
-                    model: "whisper-1",
-                });
-                textoParaIA = `[ÁUDIO TRANSCRITO]: ${transcription.text}`;
-                fs.unlinkSync(tempFile);
-            }
-            else if (msg.message.documentMessage && msg.message.documentMessage.mimetype === 'application/pdf') {
-                console.log("📄 Lendo PDF...");
-                const buffer = await downloadMediaMessage(msg, 'buffer');
-                const data = await pdf(buffer);
-                textoParaIA = `[CONTEÚDO DO PDF]: ${data.text.substring(0, 2000)}`;
-            }
+    if (!historico[jid]) historico[jid] = [];
+    historico[jid].push({ role: 'user', content: texto });
 
-            if (!textoParaIA) return;
+    if (historico[jid].length > 6) historico[jid].shift();
 
-            console.log(`Mensagem de ${remetente}: ${textoParaIA}`);
+    try {
+      const resposta = await groq.chat.completions.create({
+        model: 'llama3-8b-8192',
+        messages: [
+          { role: 'system', content: PROMPT_BASE },
+          ...historico[jid]
+        ],
+        max_tokens: 300,
+        temperature: 0.6
+      });
 
-            if (!historico[remetente]) historico[remetente] = [];
-            historico[remetente].push({ role: 'user', content: textoParaIA });
+      const textoResposta = resposta.choices[0].message.content;
 
-            await new Promise(resolve => setTimeout(resolve, 10000));
+      await sock.sendMessage(jid, { text: textoResposta });
+      historico[jid].push({ role: 'assistant', content: textoResposta });
 
-            console.log('Solicitando resposta à OpenAI...');
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                    { role: 'system', content: PROMPT_BASE },
-                    ...historico[remetente].slice(-6)
-                ],
-            });
+      console.log('✅ Resposta enviada');
 
-            const respostaIA = completion.choices[0].message.content;
-            console.log('IA Respondeu:', respostaIA);
-
-            await sock.sendMessage(remetente, { text: respostaIA });
-            historico[remetente].push({ role: 'assistant', content: respostaIA });
-
-        } catch (err) {
-            // --- BLOCO DE ERRO MELHORADO ---
-            console.error('❌ ERRO AO PROCESSAR:');
-            if (err.status) console.error('Status:', err.status);
-            if (err.message) console.error('Mensagem:', err.message);
-            if (err.code) console.error('Código:', err.code);
-            // -------------------------------
-        }
-    });
+    } catch (err) {
+      console.error('❌ Erro IA:', err.message);
+      await sock.sendMessage(jid, {
+        text: 'Tive uma instabilidade agora, pode repetir por favor?'
+      });
+    }
+  });
 }
 
-ligarBot();
+iniciarBot();
