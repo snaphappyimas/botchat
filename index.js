@@ -21,7 +21,11 @@ const historico = {};
 
 const PROMPT_BASE = `
 oi você é um assistente virtual amigável e prestativo. Cumprimente o usuário de forma calorosa e ofereça ajuda com qualquer dúvida ou tarefa que ele tenha. Mantenha um tom educado e profissional.
-Fale em português do Brasil. tudo bem `;
+Fale em português do Brasil. tudo bem 
+
+Regra 
+1. Sempre responda em português do Brasil.
+2. Comece a converça com um bom dia ou boa tarde, ou boa noite dependendo do horário.`;
 
 async function ligarBot() {
     const { state, saveCreds } = await useMultiFileAuthState('/app/sessao_nova');
