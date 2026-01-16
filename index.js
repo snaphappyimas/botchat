@@ -57,22 +57,37 @@ async function iniciarBot() {
     console.log('📲 CONECTE PELO CELULAR');
     console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
   }
+sock.ev.on('connection.update', async (update) => {
+  const { connection, lastDisconnect } = update;
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
+  if (connection === 'close') {
+    const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
 
-    if (connection === 'close') {
-      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      if (reason !== DisconnectReason.loggedOut) {
-        console.log('🔄 Reconectando em 5s...');
-        setTimeout(iniciarBot, 5000);
+    console.log('❌ Conexão fechada. Código:', reason);
+
+    if (reason !== DisconnectReason.loggedOut) {
+      console.log('🔄 Tentando reconectar em 5s...');
+      setTimeout(() => iniciarBot(), 5000);
+    }
+  }
+
+  if (connection === 'open') {
+    console.log('🤖 BOT ONLINE COM GROQ');
+
+    // 👉 pede código APENAS se não estiver logado
+    if (!sock.authState.creds.registered) {
+      try {
+        const phoneNumber = process.env.PHONE_NUMBER;
+        console.log('📲 Gerando código de pareamento...');
+        const code = await sock.requestPairingCode(phoneNumber);
+        console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
+      } catch (err) {
+        console.error('❌ Erro ao gerar código:', err.message);
       }
     }
+  }
+});
 
-    if (connection === 'open') {
-      console.log('🤖 BOT ONLINE COM GROQ');
-    }
-  });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
