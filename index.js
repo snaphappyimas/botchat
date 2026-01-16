@@ -11,9 +11,9 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-// ===============================
+
 // CONFIGURAÇÕES
-// ===============================
+
 const SESSION_PATH = '/app/sessao_groq';
 
 // garante pasta de sessão
