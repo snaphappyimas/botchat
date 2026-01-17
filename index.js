@@ -15,6 +15,7 @@ const OpenAI = require('openai');
 // CONFIG
 // ===============================
 const SESSION_PATH = '/app/sessao_groq';
+let pairingRequested = false;
 
 // garante pasta de sessão
 if (!fs.existsSync(SESSION_PATH)) {
@@ -27,7 +28,7 @@ const groq = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-// histórico simples por contato
+// histórico simples
 const historico = {};
 
 const PROMPT_BASE = `
@@ -50,44 +51,42 @@ async function iniciarBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  // 🔑 GERA CÓDIGO DE PAREAMENTO
-  if (!state.creds.registered) {
-    const numero = process.env.PHONE_NUMBER;
-    const code = await sock.requestPairingCode(numero);
-    console.log('📲 CONECTE PELO CELULAR');
-    console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
-  }
-sock.ev.on('connection.update', async (update) => {
-  const { connection, lastDisconnect } = update;
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update;
 
-  if (connection === 'close') {
-    const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+    if (connection === 'close') {
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      console.log('❌ Conexão fechada:', reason);
 
-    console.log('❌ Conexão fechada. Código:', reason);
-
-    if (reason !== DisconnectReason.loggedOut) {
-      console.log('🔄 Tentando reconectar em 5s...');
-      setTimeout(() => iniciarBot(), 5000);
-    }
-  }
-
-  if (connection === 'open') {
-    console.log('🤖 BOT ONLINE COM GROQ');
-
-    // 👉 pede código APENAS se não estiver logado
-    if (!sock.authState.creds.registered) {
-      try {
-        const phoneNumber = process.env.PHONE_NUMBER;
-        console.log('📲 Gerando código de pareamento...');
-        const code = await sock.requestPairingCode(phoneNumber);
-        console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
-      } catch (err) {
-        console.error('❌ Erro ao gerar código:', err.message);
+      if (reason !== DisconnectReason.loggedOut) {
+        setTimeout(() => iniciarBot(), 5000);
       }
     }
-  }
-});
 
+    if (connection === 'open') {
+      console.log('🤖 BOT ONLINE COM GROQ');
+
+      // 🔐 gera código UMA ÚNICA VEZ
+      if (!state.creds.registered && !pairingRequested) {
+        pairingRequested = true;
+
+        try {
+          console.log('📲 Gerando código de pareamento...');
+          await new Promise(r => setTimeout(r, 3000));
+
+          const code = await sock.requestPairingCode(
+            process.env.PHONE_NUMBER
+          );
+
+          console.log('👉 CÓDIGO DE PAREAMENTO:', code);
+          console.log('⚠️ Use no WhatsApp em até 1 minuto');
+
+        } catch (err) {
+          console.error('❌ Erro ao gerar código:', err.message);
+        }
+      }
+    }
+  });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
@@ -104,7 +103,6 @@ sock.ev.on('connection.update', async (update) => {
 
     if (!historico[jid]) historico[jid] = [];
     historico[jid].push({ role: 'user', content: texto });
-
     if (historico[jid].length > 6) historico[jid].shift();
 
     try {
