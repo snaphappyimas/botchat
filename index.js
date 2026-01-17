@@ -94,7 +94,7 @@ async function iniciarBot() {
 
     try {
       const resposta = await groq.chat.completions.create({
-        model: 'llama3-8b-8192',
+        model: 'llama-3.1-8b-instant',
         messages: [{ role: 'system', content: 'Você é um assistente amigável.' }, ...historico[jid].slice(-6)],
       });
       await sock.sendMessage(jid, { text: resposta.choices[0].message.content });
