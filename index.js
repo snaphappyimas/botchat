@@ -23,37 +23,6 @@ const groq = new OpenAI({
 
 const historico = {};
 
-// ==========================================
-// SUPER PROMPT CHIK BIJU - REGRAS E OPÇÕES
-// ==========================================
-const SYSTEM_PROMPT = `
-Você é a assistente virtual da Chik Biju. Seu atendimento é focado em vendas de semijoias, sendo humana e empática.
-
-MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
-1 - Catálogos
-2 - Continuar seu atendimento (Fluxo Humano)
-3 - Rastrear meu pedido
-4 - Nota fiscal
-5 - Realizar pagamento
-
-REGRAS DE NEGÓCIO:
-
-- SE ESCOLHER 1 (CATÁLOGOS): Envie a lista de links abaixo e pergunte: "Você gostou do catálogo? Gostaria de fazer o pedido: 1-Sim, 2-Não ou 3-Menu".
-  * CATÁLOGOS: 01-Brincos Dourados (https://photos.app.goo.gl/xhNzkFJZZzubRC7s9), 02-Brincos Foscos (https://photos.app.goo.gl/JXEUe6Xiw29bVT3y7), 03-Brincos Festas (https://photos.app.goo.gl/ttpcch49bZmJxMNb9), 04-Brincos Rústicos (https://photos.app.goo.gl/BrVwqCeSmhb8pjsbA), 08-Braceletes (https://photos.app.goo.gl/PWbgfRQKGvQfudhN6), 12-Colares Delicados (https://photos.app.goo.gl/kWDbXopuxxy7Gjba8), 17-Anéis (https://photos.app.goo.gl/BEBXddyuKCGfy3fp6).
-  * Se escolher 1 (Sim): Pergunte a forma de envio (1-Ônibus, 2-Correios, 3-Transportadora, 4-Outra).
-  * Se escolher 1 (Ônibus): Peça Nome, Cidade, Placa, Guia, Empresa e Horário.
-  * Se escolher 2 ou 3 (Correio/Transp): Peça Nome/Empresa, CPF/CNPJ, Endereço completo, CEP, Cidade/Estado.
-  * Se enviar os dados: Envie o PIX e diga: "Para iniciar seu pedido é necessário um sinal no valor de 100,00 reais que é abatido no final da compra. Agora já tenho seus dados, pode enviar o pedido com a quantidade desejada".
-  * Se escolher 4 (Outros): Ofereça 1-Retirada, 2-Motoboy. Qualquer opção aqui, diga: "Vou te passar para a Cici".
-
-- SE ESCOLHER 2 (HUMANO): Acione o fluxo humano imediatamente dizendo: "Meu nome é Cici, vou iniciar seu pedido".
-- SE ESCOLHER 3 (RASTREIO): Ofereça opções 1-Ônibus e 2-Correio. Independente da escolha, encaminhe para a Cici.
-- SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais (Nome, CPF/CNPJ, Endereço, CEP) e o romaneio. Assim que ele enviar, chame a Cici.
-- SE ESCOLHER 5 (PAGAMENTO): Envie a chave PIX diretamente.
-
-COBRANÇA: Se o cliente demorar a pagar, diga: "Oi meu amor, vi que você ainda não fez o pagamento. Vamos finalizar seu pedido? 😍"
-`;
-
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -62,7 +31,7 @@ async function iniciarBot() {
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
     browser: ['Ubuntu', 'Chrome', '22.0.0'],
-    connectTimeoutMs: 60000,
+    connectTimeoutMs: 60000, // Aumentado para evitar o 408
     keepAliveIntervalMs: 30000
   });
 
@@ -73,28 +42,43 @@ async function iniciarBot() {
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      if (reason !== DisconnectReason.loggedOut) {
+      console.log('❌ Conexão fechada. Código:', reason);
+
+      // Se der timeout (408) ou erro de credencial (401), tentamos de novo
+      if (reason === DisconnectReason.connectionLost || reason === 408 || reason === 401) {
+        console.log('🔄 Reiniciando por perda de sinal...');
+        setTimeout(() => iniciarBot(), 5000);
+      } else if (reason !== DisconnectReason.loggedOut) {
         setTimeout(() => iniciarBot(), 5000);
       }
     }
 
     if (connection === 'open') {
-      console.log('🤖 BOT CHIK BIJU ONLINE');
+      console.log('🤖 BOT ONLINE COM GROQ');
       pairingRequested = false;
     }
 
+    // Pedir código de pareamento se não estiver registrado
     if (!state.creds.registered && !pairingRequested) {
-      pairingRequested = true;
-      const num = process.env.PHONE_NUMBER;
-      if (!num) return;
-      setTimeout(async () => {
-        try {
-          const code = await sock.requestPairingCode(num);
-          console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
-        } catch (err) {
-          pairingRequested = false;
+        pairingRequested = true;
+        const num = process.env.PHONE_NUMBER;
+        
+        if (!num) {
+            console.log('⚠️ Aguardando variáveis de ambiente (PHONE_NUMBER)...');
+            pairingRequested = false;
+            return;
         }
-      }, 10000);
+
+        setTimeout(async () => {
+            try {
+                console.log('📲 Solicitando código para:', num);
+                const code = await sock.requestPairingCode(num);
+                console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
+            } catch (err) {
+                console.error('❌ Erro ao gerar código:', err.message);
+                pairingRequested = false;
+            }
+        }, 10000); // 10 segundos de espera para garantir conexão estável
     }
   });
 
@@ -111,18 +95,14 @@ async function iniciarBot() {
     try {
       const resposta = await groq.chat.completions.create({
         model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-6)
-        ],
+        messages: [{ role: 'system', content: 'Você é um assistente amigável.' }, ...historico[jid].slice(-6)],
       });
-      const textoFinal = resposta.choices[0].message.content;
-      await sock.sendMessage(jid, { text: textoFinal });
-      historico[jid].push({ role: 'assistant', content: textoFinal });
+      await sock.sendMessage(jid, { text: resposta.choices[0].message.content });
     } catch (err) {
       console.error('❌ Erro Groq:', err.message);
     }
   });
 }
+
 
 iniciarBot();
