@@ -9,7 +9,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_chikbij';
+const SESSION_PATH = '/app/sessao_chikbijuchat';
 let pairingRequested = false;
 
 if (!fs.existsSync(SESSION_PATH)) {
@@ -51,7 +51,7 @@ REGRAS DE NEGÓCIO:
 - SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais (Nome, CPF/CNPJ, Endereço, CEP) e o romaneio. Assim que ele enviar, chame a Cici.
 - SE ESCOLHER 5 (PAGAMENTO): Envie a chave PIX diretamente.
 
-COBRANÇA: Se o cliente demorar a pagar, diga: "Oi meu amor, vi que você ainda não fez o pagamento. Vamos finalizar seu pedido? 😍"
+COBRANÇA: Se o cliente demorar a pagar, diga: "Oi tudo bem? vi que você ainda não fez o pagamento. Vamos finalizar seu pedido? 😍"
 `;
 
 async function iniciarBot() {
@@ -126,5 +126,6 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
