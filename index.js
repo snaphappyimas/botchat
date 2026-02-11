@@ -22,18 +22,18 @@ const groq = new OpenAI({
 });
 
 const historico = {};
-
+const atendimentoHumano = {}; // Armazena o registro de tempo da última mensagem do dono
 // ==========================================
 // SUPER PROMPT CHIK BIJU - REGRAS E OPÇÕES
 // ==========================================
 const SYSTEM_PROMPT = `
 Você é a assistente virtual da Chik Biju. Seu atendimento é focado em vendas de joias para empreendedoras, sendo extremamente humana, paciente, empática e educada. 
 
-DIRETRIZES DE PERSONALIDADE:
-- NUNCA trate o cliente de forma ríspida ou curta.
-- NUNCA encerre o atendimento sem perguntar se pode ajudar em algo mais.
-- Se o cliente agradecer, responda com entusiasmo e cortesia: "Imagina, é um prazer ajudar! Sempre que precisar, estarei à disposição. Deseja algo mais?"
-- Trate as clientes pelo termo "empreendedora" ou "meu amor", conforme o tom amigável da marca.
+DIRETRIZES RÍGIDAS DE COMPORTAMENTO:
+1. NUNCA use termos de intimidade como "amor", "querida", "flor", "lindinha" ou "anjo". Use apenas "Empreendedora" ou o nome da cliente.
+2. NUNCA invente informações. Se o catálogo não diz o tecido, cor ou preço, NÃO CHUTE. 
+3. NÃO faça cálculos de frete nem dê prazos de entrega.
+4. Responda APENAS o que foi solicitado dentro das regras de negócio abaixo. Seja direta e profissional.
 
 MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
 🌸 É um prazer ter você aqui empreendedora, serei responsável pelo seu atendimento 🌸
@@ -45,7 +45,11 @@ MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
 
 REGRAS DE NEGÓCIO:
 
-- SE ESCOLHER 1 (CATÁLOGOS): Envie TODOS os 21 links de catálogos abaixo e pergunte: "Você gostou do catálogo? Gostaria de fazer o pedido? 1-Sim, 2-Não ou 3-Menu".
+- SE ESCOLHER 1 (CATÁLOGOS): Envie TODOS os 21 links de catálogos abaixo e pergunte exatamente desta forma: 
+"Você gostou do catálogo? Gostaria de fazer o pedido?
+1- Sim
+2- Não
+3- Menu"
 
 [LISTA DE CATÁLOGOS]
 01- BRINCOS DOURADOS E PRATAS: https://photos.app.goo.gl/xhNzkFJZZzubRC7s9
@@ -87,7 +91,7 @@ Se em qualquer momento o cliente desistir, digitar "3" ou pedir para voltar ao "
 - SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais e o romaneio. Depois chame a Cici.
 - SE ESCOLHER 5 (PAGAMENTO): Envie o PIX 37431974000130.
 
-COBRANÇA GENTIL: Se o cliente demorar a pagar, diga: "Oi tudo bem? Vi que você ainda não fez o pagamento. Vamos finalizar seu pedido para garantirmos suas peças? 😍"
+COBRANÇA GENTIL: Se o cliente demorar a pagar, diga: "Oi tudo bem? Vi que você ainda não fez o pagamento. Vamos finalizar seu pedido para garantirmos suas peças? "
 `;
 
 async function iniciarBot() {
@@ -136,8 +140,25 @@ async function iniciarBot() {
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
-    if (!msg?.message || msg.key.fromMe) return;
+    if (!msg?.message) return;
+
     const jid = msg.key.remoteJid;
+    const agora = Date.now();
+    const SEIS_HORAS = 6 * 60 * 60 * 1000; // Define o tempo de pausa em milissegundos
+
+    // REGRA DE OURO: Se a mensagem veio do dono do bot (você/cliente)
+    if (msg.key.fromMe) {
+        atendimentoHumano[jid] = agora; // Registra o momento da intervenção humana
+        console.log(`⏸️ Intervenção humana detectada para ${jid}. Bot pausado por 6h.`);
+        return; // Sai da função para o bot não responder a si mesmo
+    }
+
+    // VERIFICAÇÃO DE PAUSA: O bot só continua se não houver intervenção recente
+    if (atendimentoHumano[jid] && (agora - atendimentoHumano[jid] < SEIS_HORAS)) {
+        console.log(`⏳ Bot em modo silêncio para ${jid} devido ao atendimento humano.`);
+        return; // O bot não processa a mensagem da cliente
+    }
+
     const texto = msg.message.conversation || msg.message.extendedTextMessage?.text;
     if (!texto) return;
 
@@ -145,23 +166,26 @@ async function iniciarBot() {
     historico[jid].push({ role: 'user', content: texto });
 
     try {
-      const resposta = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-6)
-        ],
-      });
-      const textoFinal = resposta.choices[0].message.content;
-      await sock.sendMessage(jid, { text: textoFinal });
-      historico[jid].push({ role: 'assistant', content: textoFinal });
+        const resposta = await groq.chat.completions.create({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                ...historico[jid].slice(-6)
+            ],
+            temperature: 0.2 // Reduz a criatividade para evitar "alucinações"
+        });
+
+        const textoFinal = resposta.choices[0].message.content;
+        await sock.sendMessage(jid, { text: textoFinal });
+        historico[jid].push({ role: 'assistant', content: textoFinal });
     } catch (err) {
-      console.error('❌ Erro Groq:', err.message);
+        console.error('❌ Erro Groq:', err.message);
     }
-  });
+});
 }
 
 iniciarBot();
+
 
 
 
