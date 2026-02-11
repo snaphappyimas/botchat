@@ -38,7 +38,7 @@ DIRETRIZES RÍGIDAS DE COMPORTAMENTO:
 MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
 🌸 É um prazer ter você aqui empreendedora, serei responsável pelo seu atendimento 🌸
 1 - Catálogos
-2 - Continuar seu atendimento (Fluxo Humano)
+2 - Continuar seu atendimento 
 3 - Rastrear meu pedido
 4 - Nota fiscal
 5 - Realizar pagamento
@@ -185,6 +185,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
