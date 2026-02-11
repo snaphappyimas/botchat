@@ -9,7 +9,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_chikbijuWhatsAppp';
+const SESSION_PATH = '/app/sessao_chikbijuWhatsApppp';
 let pairingRequested = false;
 
 if (!fs.existsSync(SESSION_PATH)) {
@@ -185,6 +185,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
