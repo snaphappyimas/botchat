@@ -138,32 +138,43 @@ async function iniciarBot() {
     }
   });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
+ sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
+    
+    // 1. SÓ SEGUE SE TIVER UMA MENSAGEM REAL (Ignora notificações de leitura/visualização)
     if (!msg?.message) return;
 
     const jid = msg.key.remoteJid;
     const agora = Date.now();
-    const SEIS_HORAS = 6 * 60 * 60 * 1000; // Define o tempo de pausa em milissegundos
+    const SEIS_HORAS = 6 * 60 * 60 * 1000;
 
-    // REGRA DE OURO: Se a mensagem veio do dono do bot (você/cliente)
+    // Extrair o texto da mensagem com segurança
+    const textoMensagem = msg.message.conversation || 
+                          msg.message.extendedTextMessage?.text || 
+                          msg.message.imageMessage?.caption || "";
+
+    // 2. REGRA DE PAUSA: SÓ SE VOCÊ ESCREVER ALGO
     if (msg.key.fromMe) {
-        atendimentoHumano[jid] = agora; // Registra o momento da intervenção humana
-        console.log(`⏸️ Intervenção humana detectada para ${jid}. Bot pausado por 6h.`);
-        return; // Sai da função para o bot não responder a si mesmo
+        // Verifica se a mensagem que VOCÊ enviou tem texto. 
+        // Se for apenas uma visualização ou status, o texto estará vazio e o bot NÃO pausa.
+        if (textoMensagem.length > 0) {
+            atendimentoHumano[jid] = agora;
+            console.log(`⏸️ VOCÊ DIGITOU: Bot pausado para ${jid} por 6h.`);
+        }
+        return; 
     }
 
-    // VERIFICAÇÃO DE PAUSA: O bot só continua se não houver intervenção recente
+    // 3. VERIFICAÇÃO DE PAUSA ATIVA
     if (atendimentoHumano[jid] && (agora - atendimentoHumano[jid] < SEIS_HORAS)) {
-        console.log(`⏳ Bot em modo silêncio para ${jid} devido ao atendimento humano.`);
-        return; // O bot não processa a mensagem da cliente
+        console.log(`⏳ Silêncio: Atendimento humano ativo para ${jid}.`);
+        return;
     }
 
-    const texto = msg.message.conversation || msg.message.extendedTextMessage?.text;
-    if (!texto) return;
+    // 4. PROCESSAMENTO DA IA (Só se o texto do cliente não for vazio)
+    if (!textoMensagem) return;
 
     if (!historico[jid]) historico[jid] = [];
-    historico[jid].push({ role: 'user', content: texto });
+    historico[jid].push({ role: 'user', content: textoMensagem });
 
     try {
         const resposta = await groq.chat.completions.create({
@@ -172,19 +183,23 @@ async function iniciarBot() {
                 { role: 'system', content: SYSTEM_PROMPT },
                 ...historico[jid].slice(-6)
             ],
-            temperature: 0.2 // Reduz a criatividade para evitar "alucinações"
+            temperature: 0.1
         });
 
         const textoFinal = resposta.choices[0].message.content;
-        await sock.sendMessage(jid, { text: textoFinal });
-        historico[jid].push({ role: 'assistant', content: textoFinal });
+        
+        if (textoFinal) {
+            await sock.sendMessage(jid, { text: textoFinal });
+            historico[jid].push({ role: 'assistant', content: textoFinal });
+        }
     } catch (err) {
         console.error('❌ Erro Groq:', err.message);
     }
-});
+  });
 }
 
 iniciarBot();
+
 
 
 
