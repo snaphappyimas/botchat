@@ -1,33 +1,55 @@
 require('dotenv').config();
 const fs = require('fs');
+
 const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
 } = require('@whiskeysockets/baileys');
+
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_chikbijuWhatsAppp';
+/* ================= CONFIG ================= */
+
+const SESSION_PATH = '/app/sessao_chikbijuWhatsApppp';
+const UMA_HORA = 60 * 60 * 1000;
+
 let pairingRequested = false;
+
+const historico = {};
+const atendimentoHumano = {};
+
+/* ================= PASTA SESSÃO ================= */
 
 if (!fs.existsSync(SESSION_PATH)) {
   fs.mkdirSync(SESSION_PATH, { recursive: true });
 }
+
+/* ================= GROQ ================= */
 
 const groq = new OpenAI({
   apiKey: (process.env.GROQ_API_KEY || "").replace(/['"]+/g, '').trim(),
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-const historico = {};
-const atendimentoHumano = {}; // Armazena o registro de tempo da última mensagem do dono
+/* ================= PROMPT ================= */
 // ==========================================
 // SUPER PROMPT CHIK BIJU - REGRAS E OPÇÕES
 // ==========================================
+
 const SYSTEM_PROMPT = `
-Você é a assistente virtual da Chik Biju. Seu atendimento é focado em vendas de joias para empreendedoras, sendo extremamente humana, paciente, empática e educada. 
+VOCÊ É UM SISTEMA DE ATENDIMENTO COMERCIAL.
+NÃO IMAGINE, NÃO CRIE, NÃO IMPROVISE.
+
+OBEDEÇA TODAS AS REGRAS ABAIXO.
+
+É PROIBIDO:
+amor, querida, flor, linda, anjo, paixão, vida, coração.
+
+Se usar, a resposta estará errada.
+ 
 
 DIRETRIZES RÍGIDAS DE COMPORTAMENTO:
 1. NUNCA use termos de intimidade como "amor", "querida", "flor", "lindinha" ou "anjo". Use apenas "Empreendedora" ou o nome da cliente.
@@ -35,8 +57,19 @@ DIRETRIZES RÍGIDAS DE COMPORTAMENTO:
 3. NÃO faça cálculos de frete nem dê prazos de entrega.
 4. Responda APENAS o que foi solicitado dentro das regras de negócio abaixo. Seja direta e profissional.
 
+
+
+Você é a assistente virtual da Chik Biju.
+Atendimento profissional, objetivo e respeitoso.
+
+REGRA INICIAL:
+- No PRIMEIRO contato com o cliente, envie SEMPRE o Menu Principal completo, antes de qualquer outra resposta.
+- Se o cliente disser apenas "oi", "olá", "bom dia", "boa tarde" ou algo genérico, envie o Menu Principal.
+
+
+Nunca quebre as regras abaixo.
 MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
-🌸 É um prazer ter você aqui empreendedora, serei responsável pelo seu atendimento 🌸
+🌸Bem-vinda à Chik Biju. Sou a assistente e vou conduzir seu atendimento.🌸
 1 - Catálogos
 2 - Continuar seu atendimento 
 3 - Rastrear meu pedido
@@ -74,7 +107,7 @@ REGRAS DE NEGÓCIO:
 20- BOLSAS E CHAPÉUS: https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
 21- COLARES DE VERÃO: https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
 
-- SE ESCOLHER 1 (SIM PARA PEDIDO): Diga: "Para facilitar seu atendimento, por favor me envie as informações completas abaixo". Em seguida, pergunte a forma de envio: 1-Ônibus, 2-Correios, 3-Transportadora, 4-Outra.
+- SE ESCOLHER "1- Sim" (APÓS VER OS CATÁLOGOS):Diga: "Para facilitar seu atendimento, por favor me envie as informações completas abaixo". Em seguida, pergunte a forma de envio: 1-Ônibus, 2-Correios, 3-Transportadora, 4-Outra.
 - DADOS ÔNIBUS: Peça Nome, Cidade, Placa, Guia, Empresa e Horário.
 - DADOS CORREIO/TRANSP: Peça Nome/Empresa, CPF/CNPJ, Endereço completo, CEP, Cidade/Estado.
 - APÓS DADOS ENVIADOS: Envie o PIX 37431974000130 e diga: "Para iniciar seu pedido é necessário um sinal no valor de 100,00 reais que é abatido no final da compra. Agora já tenho seus dados, pode enviar o pedido com a quantidade desejada".
@@ -93,9 +126,11 @@ Se em qualquer momento o cliente desistir, digitar "3" ou pedir para voltar ao "
 
 COBRANÇA GENTIL: Se o cliente demorar a pagar, diga: "Oi tudo bem? Vi que você ainda não fez o pagamento. Vamos finalizar seu pedido para garantirmos suas peças? "
 `;
-
+  /* ============ CONEXÃO ============ */
 async function iniciarBot() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
+
+  const { state, saveCreds } =
+    await useMultiFileAuthState(SESSION_PATH);
 
   const sock = makeWASocket({
     auth: state,
@@ -108,13 +143,19 @@ async function iniciarBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
+  /* ============ CONEXÃO ============ */
+
   sock.ev.on('connection.update', async (update) => {
+
     const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
-      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+
+      const reason =
+        new Boom(lastDisconnect?.error)?.output?.statusCode;
+
       if (reason !== DisconnectReason.loggedOut) {
-        setTimeout(() => iniciarBot(), 5000);
+        setTimeout(iniciarBot, 5000);
       }
     }
 
@@ -123,89 +164,186 @@ async function iniciarBot() {
       pairingRequested = false;
     }
 
+    /* ============ PAREAMENTO ============ */
+
     if (!state.creds.registered && !pairingRequested) {
+
       pairingRequested = true;
+
       const num = process.env.PHONE_NUMBER;
       if (!num) return;
+
       setTimeout(async () => {
+
         try {
-          const code = await sock.requestPairingCode(num);
-          console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
-        } catch (err) {
+
+          const code =
+            await sock.requestPairingCode(num);
+
+          console.log('👉 CÓDIGO:', code);
+
+        } catch {
           pairingRequested = false;
         }
+
       }, 10000);
     }
+
   });
 
- sock.ev.on('messages.upsert', async ({ messages }) => {
+  /* ============ MENSAGENS ============ */
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+
     const msg = messages[0];
-    
-    // 1. IGNORA MENSAGENS VAZIAS, GRUPOS OU STATUS
-    if (!msg?.message || msg.key.remoteJid.includes('@g.us') || msg.key.remoteJid === 'status@broadcast') return;
+    if (!msg?.message) return;
 
     const jid = msg.key.remoteJid;
+
+    if (
+      jid.includes('@g.us') ||
+      jid === 'status@broadcast'
+    ) return;
+
     const agora = Date.now();
-    const UMA_HORA = 1 * 60 * 60 * 1000; // Tempo reduzido para 1h
 
-    // Extrair o texto da mensagem
-    const textoMensagem = msg.message.conversation || 
-                          msg.message.extendedTextMessage?.text || 
-                          msg.message.imageMessage?.caption || "";
+    /* ===== TEXTO ===== */
 
-    // 2. REGRA DE PAUSA INTELIGENTE (CORREÇÃO DO BUG)
+    const texto =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      msg.message.imageMessage?.caption ||
+      '';
+
+    if (!texto.trim()) return;
+
+    /* ===== RESET MENU ===== */
+
+    if (
+      texto.trim() === '3' ||
+      texto.toLowerCase().includes('menu')
+    ) {
+      historico[jid] = [];
+    }
+
+    /* ===== PAUSA HUMANA ===== */
+
     if (msg.key.fromMe) {
-        // Lista de frases que o BOT usa. Se a mensagem contiver isso, NÃO é intervenção humana.
-        const frasesDoBot = ["É um prazer", "Catálogos", "https://photos.app.goo.gl", "Cici", "chave PIX"];
-        const ehMensagemDoProprioBot = frasesDoBot.some(termo => textoMensagem.includes(termo));
 
-        // Só pausa se você digitar algo REAL que não seja o script do bot
-        if (textoMensagem.length > 0 && !ehMensagemDoProprioBot) {
-            atendimentoHumano[jid] = agora;
-            console.log(`⚠️ INTERVENÇÃO MANUAL detectada em ${jid}: Bot pausado por 1h.`);
-        }
-        return; 
+      const botTags = [
+        '🌸',
+        'Catálogos',
+        'https://photos.app.goo.gl',
+        'PIX',
+        'Cici',
+        'É um prazer'
+      ];
+
+      const ehBot =
+        botTags.some(t => texto.includes(t));
+
+      if (!ehBot && texto.length > 2) {
+
+        atendimentoHumano[jid] = agora;
+
+        console.log(`⏸️ PAUSA → ${jid}`);
+      }
+
+      return;
     }
 
-    // 3. VERIFICAÇÃO DE PAUSA ATIVA
-    if (atendimentoHumano[jid] && (agora - atendimentoHumano[jid] < UMA_HORA)) {
-        console.log(`⏳ Silêncio: Atendimento humano ativo para ${jid}.`);
-        return;
+    /* ===== VERIFICA PAUSA ===== */
+
+    if (
+      atendimentoHumano[jid] &&
+      (agora - atendimentoHumano[jid] < UMA_HORA)
+    ) {
+      console.log(`⏳ SILÊNCIO → ${jid}`);
+      return;
     }
 
-    // 4. PROCESSAMENTO DA IA
-    if (!textoMensagem) return;
+    /* ===== PRIMEIRO CONTATO ===== */
 
-    if (!historico[jid]) historico[jid] = [];
-    historico[jid].push({ role: 'user', content: textoMensagem });
+if (!historico[jid] || historico[jid].length === 0) {
+
+  const menu = `🌸Bem-vinda à Chik Biju. Sou a assistente e vou conduzir seu atendimento.🌸
+
+1 - Catálogos
+2 - Continuar seu atendimento
+3 - Rastrear meu pedido
+4 - Nota fiscal
+5 - Realizar pagamento`;
+
+  await sock.sendMessage(jid, { text: menu });
+
+  historico[jid] = [
+    { role: 'assistant', content: menu }
+  ];
+
+  return;
+}
+
+/* ===== HISTÓRICO ===== */
+
+if (!historico[jid]) historico[jid] = [];
+
+historico[jid].push({
+  role: 'user',
+  content: texto
+});
+
+
+    /* ===== IA ===== */
 
     try {
-        const resposta = await groq.chat.completions.create({
-            model: 'llama-3.1-8b-instant',
-            messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                ...historico[jid].slice(-5) // Mantém as últimas 5 mensagens para contexto
-            ],
-            temperature: 0.0 // Zero para não inventar informações
+
+      const res =
+        await groq.chat.completions.create({
+
+          model: 'llama-3.3-70b-versatile',
+
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...historico[jid].slice(-6)
+          ],
+
+          temperature: 0
         });
 
-        const textoFinal = resposta.choices[0].message.content;
-        
-        if (textoFinal) {
-            await sock.sendMessage(jid, { text: textoFinal });
-            historico[jid].push({ role: 'assistant', content: textoFinal });
-        }
-    } catch (err) {
-        console.error('❌ Erro Groq:', err.message);
-    }
+      const resposta =
+  res.choices[0]?.message?.content;
+
+if (!resposta) return;
+
+// BLOQUEIO DE LINGUAGEM PROIBIDA
+if (/amor|querida|flor|linda|anjo|paixão|vida|coração/i.test(resposta)) {
+  console.log('⚠️ RESPOSTA BLOQUEADA: linguagem proibida');
+  return;
+}
+
+await sock.sendMessage(jid, {
+  text: resposta
 });
+
+
+      historico[jid].push({
+        role: 'assistant',
+        content: resposta
+      });
+
+    } catch (err) {
+
+      console.error(
+        '❌ ERRO IA:',
+        err.message
+      );
+    }
+
+  });
+
 }
 
 iniciarBot();
-
-
-
-
 
 
 
