@@ -21,7 +21,7 @@ let pairingRequested = false;
 const historico = {};
 const atendimentoHumano = {};
 
-/* ================= PASTA SESSÃO ================= */
+/* ================= PASTA ================= */
 
 if (!fs.existsSync(SESSION_PATH)) {
   fs.mkdirSync(SESSION_PATH, { recursive: true });
@@ -35,9 +35,6 @@ const groq = new OpenAI({
 });
 
 /* ================= PROMPT ================= */
-// ==========================================
-// SUPER PROMPT CHIK BIJU - REGRAS E OPÇÕES
-// ==========================================
 
 const SYSTEM_PROMPT = `
 VOCÊ É UM SISTEMA DE ATENDIMENTO COMERCIAL.
@@ -51,82 +48,115 @@ amor, querida, flor, linda, anjo, paixão, vida, coração.
 Se usar, a resposta estará errada.
  
 
-DIRETRIZES RÍGIDAS DE COMPORTAMENTO:
-1. NUNCA use termos de intimidade como "amor", "querida", "flor", "lindinha" ou "anjo". Use apenas "Empreendedora" ou o nome da cliente.
-2. NUNCA invente informações. Se o catálogo não diz o tecido, cor ou preço, NÃO CHUTE. 
-3. NÃO faça cálculos de frete nem dê prazos de entrega.
-4. Responda APENAS o que foi solicitado dentro das regras de negócio abaixo. Seja direta e profissional.
+DIRETRIZES:
+1. Nunca use termos íntimos.
+2. Nunca invente informações.
+3. Não calcule frete nem prazo.
+4. Seja direta e profissional.
 
+Você é a assistente da Chik Biju.
 
-
-Você é a assistente virtual da Chik Biju.
-Atendimento profissional, objetivo e respeitoso.
-
-REGRA INICIAL:
-- No PRIMEIRO contato com o cliente, envie SEMPRE o Menu Principal completo, antes de qualquer outra resposta.
-- Se o cliente disser apenas "oi", "olá", "bom dia", "boa tarde" ou algo genérico, envie o Menu Principal.
-
-
-Nunca quebre as regras abaixo.
-MENU PRINCIPAL (Sempre ofereça se o cliente estiver perdido):
-🌸Bem-vinda à Chik Biju. Sou a assistente e vou conduzir seu atendimento.🌸
-1 - Catálogos
-2 - Continuar seu atendimento 
-3 - Rastrear meu pedido
-4 - Nota fiscal
-5 - Realizar pagamento
+IMPORTANTE:
+O MENU inicial é enviado PELO SISTEMA.
+NUNCA recrie menu.
 
 REGRAS DE NEGÓCIO:
 
-- SE ESCOLHER 1 (CATÁLOGOS): Envie TODOS os 21 links de catálogos abaixo e pergunte exatamente desta forma: 
-"Você gostou do catálogo? Gostaria de fazer o pedido?
+- SE ESCOLHER 1 (CATÁLOGOS):
+Envie TODOS os links e depois pergunte:
+
+"Você gostou do catálogo?
 1- Sim
 2- Não
 3- Menu"
 
 [LISTA DE CATÁLOGOS]
-01- BRINCOS DOURADOS E PRATAS: https://photos.app.goo.gl/xhNzkFJZZzubRC7s9
-02- BRINCOS FOSCOS E 2 BANHOS: https://photos.app.goo.gl/JXEUe6Xiw29bVT3y7
-03- BRINCOS DE FESTAS E PEDRARIAS: https://photos.app.goo.gl/ttpcch49bZmJxMNb9
-04- BRINCOS RÚSTICOS E PÉROLAS: https://photos.app.goo.gl/BrVwqCeSmhb8pjsbA
-05- BRINCOS RESINADOS: https://photos.app.goo.gl/GoirJbATzXRhWU779
-06- BRINCOS DE VERÃO E PALHA: https://photos.app.goo.gl/pXuHZBRhvXmnWD3HA
-07- KITS BRINCOS E PIERCING FAKE: https://photos.app.goo.gl/g5pjEgGVb4fS1gWn6
-08- BRACELETES: https://photos.app.goo.gl/PWbgfRQKGvQfudhN6
-09- PULSEIRAS E TORNOZELEIRAS: https://photos.app.goo.gl/iVEBpoTzQ4TWquX18
-10- ACESSÓRIOS DE CABELO: https://photos.app.goo.gl/XfkUKnU6dwzuPF6E9
-11- ACESSÓRIOS INFANTIS: https://photos.app.goo.gl/CHRuv4Bm1gCqaN9j7
-12- COLARES FOLHEADOS E DELICADOS: https://photos.app.goo.gl/kWDbXopuxxy7Gjba8
-13- COLARES CORRENTARIAS: https://photos.app.goo.gl/gphv98Qg1w7d6epM7
-14- COLARES DE PÉROLAS E TRANSPARENTES: https://photos.app.goo.gl/PBssLiufWPEmTMqs6
-15- COLARES RÚSTICOS E BOHOCHIC: https://photos.app.goo.gl/aqp7zFiBptNRerRd7
-16- CHOKES E AROS: https://photos.app.goo.gl/BYsLEe7NyJiDKyNq6
-17- ANÉIS: https://photos.app.goo.gl/BEBXddyuKCGfy3fp6
-18- CINTOS: https://photos.app.goo.gl/NU8nX2N4ZTf2EcZx6
-19- LENÇOS E CANGAS: https://photos.app.goo.gl/CXCDtoG8JeJYgjbQ7
-20- BOLSAS E CHAPÉUS: https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
-21- COLARES DE VERÃO: https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
+01- https://photos.app.goo.gl/xhNzkFJZZzubRC7s9
+02- https://photos.app.goo.gl/JXEUe6Xiw29bVT3y7
+03- https://photos.app.goo.gl/ttpcch49bZmJxMNb9
+04- https://photos.app.goo.gl/BrVwqCeSmhb8pjsbA
+05- https://photos.app.goo.gl/GoirJbATzXRhWU779
+06- https://photos.app.goo.gl/pXuHZBRhvXmnWD3HA
+07- https://photos.app.goo.gl/g5pjEgGVb4fS1gWn6
+08- https://photos.app.goo.gl/PWbgfRQKGvQfudhN6
+09- https://photos.app.goo.gl/iVEBpoTzQ4TWquX18
+10- https://photos.app.goo.gl/XfkUKnU6dwzuPF6E9
+11- https://photos.app.goo.gl/CHRuv4Bm1gCqaN9j7
+12- https://photos.app.goo.gl/kWDbXopuxxy7Gjba8
+13- https://photos.app.goo.gl/gphv98Qg1w7d6epM7
+14- https://photos.app.goo.gl/PBssLiufWPEmTMqs6
+15- https://photos.app.goo.gl/aqp7zFiBptNRerRd7
+16- https://photos.app.goo.gl/BYsLEe7NyJiDKyNq6
+17- https://photos.app.goo.gl/BEBXddyuKCGfy3fp6
+18- https://photos.app.goo.gl/NU8nX2N4ZTf2EcZx6
+19- https://photos.app.goo.gl/CXCDtoG8JeJYgjbQ7
+20- https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
+21- https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
 
-- SE ESCOLHER "1- Sim" (APÓS VER OS CATÁLOGOS):Diga: "Para facilitar seu atendimento, por favor me envie as informações completas abaixo". Em seguida, pergunte a forma de envio: 1-Ônibus, 2-Correios, 3-Transportadora, 4-Outra.
-- DADOS ÔNIBUS: Peça Nome, Cidade, Placa, Guia, Empresa e Horário.
-- DADOS CORREIO/TRANSP: Peça Nome/Empresa, CPF/CNPJ, Endereço completo, CEP, Cidade/Estado.
-- APÓS DADOS ENVIADOS: Envie o PIX 37431974000130 e diga: "Para iniciar seu pedido é necessário um sinal no valor de 100,00 reais que é abatido no final da compra. Agora já tenho seus dados, pode enviar o pedido com a quantidade desejada".
+- APÓS "1- SIM":
+Peça dados de envio.
 
-- REGRA DE VALIDAÇÃO OBRIGATÓRIA (BLOQUEIO):
-1. Se o cliente escolheu ÔNIBUS, CORREIO ou TRANSPORTADORA, você NÃO deve enviar o PIX nem passar para o próximo assunto enquanto ele não fornecer TODOS os dados solicitados (Nome, Cidade, CPF/CNPJ, etc).
-2. Se o cliente enviar apenas parte dos dados, agradeça gentilmente e diga: "Para prosseguirmos com seu pedido e eu te enviar a chave PIX, ainda faltam estas informações: [cite o que falta]".
-3. Só libere a chave PIX (37431974000130) e a confirmação de sinal após o recebimento completo dos dados.
+- ÔNIBUS:
+Nome, Cidade, Placa, Guia, Empresa, Horário.
 
-- EXCEÇÃO:
-Se em qualquer momento o cliente desistir, digitar "3" ou pedir para voltar ao "Menu", interrompa a coleta de dados e mostre o Menu Principal.
-- SE ESCOLHER 2 (HUMANO): Diga: "Meu nome é Cici, vou iniciar seu pedido".
-- SE ESCOLHER 3 (RASTREIO): Ofereça 1-Ônibus e 2-Correio e chame a Cici.
-- SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais e o romaneio. Depois chame a Cici.
-- SE ESCOLHER 5 (PAGAMENTO): Envie o PIX 37431974000130.
+- CORREIO/TRANSP:
+Nome/Empresa, CPF/CNPJ, Endereço, CEP, Cidade/Estado.
 
-COBRANÇA GENTIL: Se o cliente demorar a pagar, diga: "Oi tudo bem? Vi que você ainda não fez o pagamento. Vamos finalizar seu pedido para garantirmos suas peças? "
+- SOMENTE após dados completos:
+Envie PIX: 37431974000130
+Sinal: R$100,00
+
+- Se faltar dado:
+Informe exatamente o que falta.
+
+- "3" ou "MENU":
+Interrompa e volte ao menu.
+
+- SE ESCOLHER 2:
+Atendimento humano.
+
+- SE ESCOLHER 3:
+Rastreio.
+
+- SE ESCOLHER 4:
+Nota fiscal.
+
+- SE ESCOLHER 5:
+Enviar PIX.
+
+COBRANÇA:
+"Oi, tudo bem? Vi que você ainda não fez o pagamento..."
 `;
-  /* ============ CONEXÃO ============ */
+
+
+/* ================= LIMPAR TEXTO ================= */
+
+function limparResposta(texto) {
+
+  const proibidas = [
+    'meu amor',
+    'amor',
+    'querida',
+    'flor',
+    'linda',
+    'anjo',
+    'paixão',
+    'vida',
+    'coração'
+  ];
+
+  let t = texto;
+
+  proibidas.forEach(p => {
+    const r = new RegExp(p, 'gi');
+    t = t.replace(r, '');
+  });
+
+  return t.trim();
+}
+
+/* ================= BOT ================= */
+
 async function iniciarBot() {
 
   const { state, saveCreds } =
@@ -136,14 +166,12 @@ async function iniciarBot() {
     auth: state,
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: ['Ubuntu', 'Chrome', '22.0.0'],
-    connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000
+    browser: ['Ubuntu', 'Chrome', '22.0.0']
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  /* ============ CONEXÃO ============ */
+  /* ================= CONEXÃO ================= */
 
   sock.ev.on('connection.update', async (update) => {
 
@@ -160,11 +188,11 @@ async function iniciarBot() {
     }
 
     if (connection === 'open') {
-      console.log('🤖 BOT CHIK BIJU ONLINE');
+      console.log('🤖 BOT ONLINE');
       pairingRequested = false;
     }
 
-    /* ============ PAREAMENTO ============ */
+    /* ========== PAREAMENTO ========== */
 
     if (!state.creds.registered && !pairingRequested) {
 
@@ -191,7 +219,7 @@ async function iniciarBot() {
 
   });
 
-  /* ============ MENSAGENS ============ */
+  /* ================= MENSAGENS ================= */
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
 
@@ -223,32 +251,27 @@ async function iniciarBot() {
       texto.trim() === '3' ||
       texto.toLowerCase().includes('menu')
     ) {
-      historico[jid] = [];
+      delete historico[jid];
     }
 
-    /* ===== PAUSA HUMANA ===== */
+    /* ===== ATENDIMENTO HUMANO ===== */
+
+    if (texto.trim() === '2') {
+
+      atendimentoHumano[jid] = agora;
+
+      await sock.sendMessage(jid, {
+        text: 'Aguarde um momento. Você será atendida por nossa equipe.'
+      });
+
+      return;
+    }
+
+    /* ===== MENSAGEM DO OPERADOR ===== */
 
     if (msg.key.fromMe) {
 
-      const botTags = [
-        '🌸',
-        'Catálogos',
-        'https://photos.app.goo.gl',
-        'PIX',
-        'Cici',
-        'É um prazer'
-      ];
-
-      const ehBot =
-        botTags.some(t => texto.includes(t));
-
-      if (!ehBot && texto.length > 2) {
-
-        atendimentoHumano[jid] = agora;
-
-        console.log(`⏸️ PAUSA → ${jid}`);
-      }
-
+      atendimentoHumano[jid] = agora;
       return;
     }
 
@@ -258,40 +281,40 @@ async function iniciarBot() {
       atendimentoHumano[jid] &&
       (agora - atendimentoHumano[jid] < UMA_HORA)
     ) {
-      console.log(`⏳ SILÊNCIO → ${jid}`);
       return;
     }
 
     /* ===== PRIMEIRO CONTATO ===== */
 
-if (!historico[jid] || historico[jid].length === 0) {
+    if (!historico[jid] || historico[jid].length === 0) {
 
-  const menu = `🌸Bem-vinda à Chik Biju. Sou a assistente e vou conduzir seu atendimento.🌸
+      const menu = `
+🌸 Bem-vinda à Chik Biju 🌸
 
 1 - Catálogos
-2 - Continuar seu atendimento
-3 - Rastrear meu pedido
+2 - Atendimento humano
+3 - Menu
 4 - Nota fiscal
-5 - Realizar pagamento`;
+5 - Pagamento
+`;
 
-  await sock.sendMessage(jid, { text: menu });
+      await sock.sendMessage(jid, { text: menu });
 
-  historico[jid] = [
-    { role: 'assistant', content: menu }
-  ];
+      historico[jid] = [
+        { role: 'assistant', content: menu }
+      ];
 
-  return;
-}
+      return;
+    }
 
-/* ===== HISTÓRICO ===== */
+    /* ===== HISTÓRICO ===== */
 
-if (!historico[jid]) historico[jid] = [];
+    if (!historico[jid]) historico[jid] = [];
 
-historico[jid].push({
-  role: 'user',
-  content: texto
-});
-
+    historico[jid].push({
+      role: 'user',
+      content: texto
+    });
 
     /* ===== IA ===== */
 
@@ -304,27 +327,23 @@ historico[jid].push({
 
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
-            ...historico[jid].slice(-6)
+            ...historico[jid].slice(-4)
           ],
 
           temperature: 0
         });
 
-      const resposta =
-  res.choices[0]?.message?.content;
+      let resposta =
+        res.choices[0]?.message?.content;
 
-if (!resposta) return;
+      if (!resposta) return;
 
-// BLOQUEIO DE LINGUAGEM PROIBIDA
-if (/amor|querida|flor|linda|anjo|paixão|vida|coração/i.test(resposta)) {
-  console.log('⚠️ RESPOSTA BLOQUEADA: linguagem proibida');
-  return;
-}
+      // LIMPA PALAVRAS PROIBIDAS
+      resposta = limparResposta(resposta);
 
-await sock.sendMessage(jid, {
-  text: resposta
-});
-
+      await sock.sendMessage(jid, {
+        text: resposta
+      });
 
       historico[jid].push({
         role: 'assistant',
@@ -333,10 +352,7 @@ await sock.sendMessage(jid, {
 
     } catch (err) {
 
-      console.error(
-        '❌ ERRO IA:',
-        err.message
-      );
+      console.error('❌ ERRO IA:', err.message);
     }
 
   });
@@ -344,19 +360,3 @@ await sock.sendMessage(jid, {
 }
 
 iniciarBot();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
