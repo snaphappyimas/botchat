@@ -141,36 +141,39 @@ async function iniciarBot() {
  sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     
-    // 1. SÓ SEGUE SE TIVER UMA MENSAGEM REAL (Ignora notificações de leitura/visualização)
-    if (!msg?.message) return;
+    // 1. IGNORA MENSAGENS VAZIAS, GRUPOS OU STATUS
+    if (!msg?.message || msg.key.remoteJid.includes('@g.us') || msg.key.remoteJid === 'status@broadcast') return;
 
     const jid = msg.key.remoteJid;
     const agora = Date.now();
-    const SEIS_HORAS = 6 * 60 * 60 * 1000;
+    const UMA_HORA = 1 * 60 * 60 * 1000; // Tempo reduzido para 1h
 
-    // Extrair o texto da mensagem com segurança
+    // Extrair o texto da mensagem
     const textoMensagem = msg.message.conversation || 
                           msg.message.extendedTextMessage?.text || 
                           msg.message.imageMessage?.caption || "";
 
-    // 2. REGRA DE PAUSA: SÓ SE VOCÊ ESCREVER ALGO
+    // 2. REGRA DE PAUSA INTELIGENTE (CORREÇÃO DO BUG)
     if (msg.key.fromMe) {
-        // Verifica se a mensagem que VOCÊ enviou tem texto. 
-        // Se for apenas uma visualização ou status, o texto estará vazio e o bot NÃO pausa.
-        if (textoMensagem.length > 0) {
+        // Lista de frases que o BOT usa. Se a mensagem contiver isso, NÃO é intervenção humana.
+        const frasesDoBot = ["É um prazer", "Catálogos", "https://photos.app.goo.gl", "Cici", "chave PIX"];
+        const ehMensagemDoProprioBot = frasesDoBot.some(termo => textoMensagem.includes(termo));
+
+        // Só pausa se você digitar algo REAL que não seja o script do bot
+        if (textoMensagem.length > 0 && !ehMensagemDoProprioBot) {
             atendimentoHumano[jid] = agora;
-            console.log(`⏸️ VOCÊ DIGITOU: Bot pausado para ${jid} por 6h.`);
+            console.log(`⚠️ INTERVENÇÃO MANUAL detectada em ${jid}: Bot pausado por 1h.`);
         }
         return; 
     }
 
     // 3. VERIFICAÇÃO DE PAUSA ATIVA
-    if (atendimentoHumano[jid] && (agora - atendimentoHumano[jid] < SEIS_HORAS)) {
+    if (atendimentoHumano[jid] && (agora - atendimentoHumano[jid] < UMA_HORA)) {
         console.log(`⏳ Silêncio: Atendimento humano ativo para ${jid}.`);
         return;
     }
 
-    // 4. PROCESSAMENTO DA IA (Só se o texto do cliente não for vazio)
+    // 4. PROCESSAMENTO DA IA
     if (!textoMensagem) return;
 
     if (!historico[jid]) historico[jid] = [];
@@ -181,9 +184,9 @@ async function iniciarBot() {
             model: 'llama-3.1-8b-instant',
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
-                ...historico[jid].slice(-6)
+                ...historico[jid].slice(-5) // Mantém as últimas 5 mensagens para contexto
             ],
-            temperature: 0.1
+            temperature: 0.0 // Zero para não inventar informações
         });
 
         const textoFinal = resposta.choices[0].message.content;
@@ -195,10 +198,11 @@ async function iniciarBot() {
     } catch (err) {
         console.error('❌ Erro Groq:', err.message);
     }
-  });
+});
 }
 
 iniciarBot();
+
 
 
 
