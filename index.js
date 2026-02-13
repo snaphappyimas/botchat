@@ -9,8 +9,12 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_cliente_Bchat';
-const UMA_HORA = 60 * 60 * 1000; // Tempo de pausa
+const SESSION_PATH = '/app/sessao_cliente_BchatWhatsApp1';
+const UMA_HORA = 60 * 60 * 1000;
+
+const PALAVRA_PAUSA = "#pausar";
+const PALAVRA_VOLTAR = "#voltar";
+
 let pairingRequested = false;
 
 if (!fs.existsSync(SESSION_PATH)) {
@@ -23,7 +27,7 @@ const groq = new OpenAI({
 });
 
 const historico = {};
-const atendimentoHumano = {}; // Registro de quando você falou
+const atendimentoHumano = {};
 
 const SYSTEM_PROMPT = `
 Você é a assistente virtual da Chik Biju. Seu atendimento é focado em vendas de joias para empreendedoras, sendo extremamente humana, paciente, empática e educada. 
@@ -97,10 +101,14 @@ async function iniciarBot() {
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
+
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      if (reason !== DisconnectReason.loggedOut) setTimeout(() => iniciarBot(), 5000);
+      if (reason !== DisconnectReason.loggedOut) {
+        setTimeout(() => iniciarBot(), 5000);
+      }
     }
+
     if (connection === 'open') {
       console.log('🤖 BOT CHIK BIJU ONLINE');
       pairingRequested = false;
@@ -110,42 +118,69 @@ async function iniciarBot() {
       pairingRequested = true;
       const num = process.env.PHONE_NUMBER;
       if (!num) return;
+
       setTimeout(async () => {
         try {
           const code = await sock.requestPairingCode(num);
           console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
-        } catch (err) { pairingRequested = false; }
+        } catch (err) {
+          pairingRequested = false;
+        }
       }, 10000);
     }
   });
 
-sock.ev.on('messages.upsert', async ({ messages }) => {
+  sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg?.message) return;
-    
-    // Pega o tempo da mensagem (em segundos) e o tempo atual
+
     const msgTime = msg.messageTimestamp;
     const agora = Math.floor(Date.now() / 1000);
-
-    // Se a mensagem for mais velha que 30 segundos, ignoramos (evita ler histórico)
     if (agora - msgTime > 30) return;
 
     const jid = msg.key.remoteJid;
 
-    // --- LÓGICA DE PAUSA CORRIGIDA ---
+    const texto =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      "";
+
+    /* ==============================
+       🔐 CONTROLE MANUAL DE PAUSA
+    ============================== */
+
     if (msg.key.fromMe) {
-      // Só pausa se você enviar a mensagem DEPOIS que o bot já estiver online
-      console.log(`Pausando bot para ${jid} porque você enviou uma mensagem nova.`);
-      atendimentoHumano[jid] = Date.now();
+      const textoLower = texto.toLowerCase().trim();
+
+      if (textoLower === PALAVRA_PAUSA) {
+        atendimentoHumano[jid] = Date.now();
+        console.log(`🛑 Bot pausado manualmente para ${jid}`);
+      }
+
+      if (textoLower === PALAVRA_VOLTAR) {
+        delete atendimentoHumano[jid];
+        console.log(`✅ Bot reativado manualmente para ${jid}`);
+      }
+
       return;
     }
 
-    // Verifica se o bot deve ficar quieto (1 hora de silêncio)
-    if (atendimentoHumano[jid] && (Date.now() - atendimentoHumano[jid] < UMA_HORA)) {
-      return;
+    /* ==============================
+       ⏸️ VERIFICA SE ESTÁ EM PAUSA
+    ============================== */
+
+    if (atendimentoHumano[jid]) {
+      const tempoDecorrido = Date.now() - atendimentoHumano[jid];
+
+      if (tempoDecorrido < UMA_HORA) {
+        console.log(`⏸️ Bot está pausado para ${jid}`);
+        return;
+      } else {
+        console.log(`✅ Pausa automática encerrada para ${jid}`);
+        delete atendimentoHumano[jid];
+      }
     }
 
-    const texto = msg.message.conversation || msg.message.extendedTextMessage?.text;
     if (!texto) return;
 
     if (!historico[jid]) historico[jid] = [];
@@ -159,9 +194,13 @@ sock.ev.on('messages.upsert', async ({ messages }) => {
           ...historico[jid].slice(-8)
         ],
       });
+
       const textoFinal = resposta.choices[0].message.content;
+
       await sock.sendMessage(jid, { text: textoFinal });
+
       historico[jid].push({ role: 'assistant', content: textoFinal });
+
     } catch (err) {
       console.error('❌ Erro Groq:', err.message);
     }
@@ -169,4 +208,3 @@ sock.ev.on('messages.upsert', async ({ messages }) => {
 }
 
 iniciarBot();
-
