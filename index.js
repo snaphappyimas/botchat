@@ -4,17 +4,14 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
-} = require('@whiskeysockets/baileys'); // Corrigido aqui
+} = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-/* ================= CONFIG ================= */
-const SESSION_PATH = '/app/sessao_chikbijuWhatsApp1';
-const UMA_HORA = 60 * 60 * 1000;
+const SESSION_PATH = '/app/sessao_cliente_Bchat';
+const UMA_HORA = 60 * 60 * 1000; // Tempo de pausa
 let pairingRequested = false;
-const historico = {};
-const atendimentoHumano = {};
 
 if (!fs.existsSync(SESSION_PATH)) {
   fs.mkdirSync(SESSION_PATH, { recursive: true });
@@ -25,16 +22,27 @@ const groq = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-const SYSTEM_PROMPT = `
-VOCÊ É A ASSISTENTE VIRTUAL DA CHIK BIJU.
-SEJA EXTREMAMENTE HUMANA, PACIENTE E EMPÁTICA.
+const historico = {};
+const atendimentoHumano = {}; // Registro de quando você falou
 
-DIRETRIZES:
+const SYSTEM_PROMPT = `
+Você é a assistente virtual da Chik Biju. Seu atendimento é focado em vendas de joias para empreendedoras, sendo extremamente humana, paciente, empática e educada. 
+
+DIRETRIZES DE PERSONALIDADE:
+- NUNCA trate o cliente de forma ríspida ou curta.
+- NUNCA encerre o atendimento sem perguntar se pode ajudar em algo mais.
 - PROIBIDO: amor, querida, flor, linda, anjo, paixão, vida, coração. Use "Empreendedora".
-- NUNCA use termos íntimos.
+
+MENU PRINCIPAL:
+Seja bem vindo Chik Biju!
+1 - Catálogos
+2 - Continuar atendimento
+3 - Rastrear meu pedido
+4 - Nota fiscal
+5 - Realizar pagamento
 
 REGRAS DE NEGÓCIO:
-1. SE ESCOLHER 1 (CATÁLOGOS): Envie os 21 links abaixo e pergunte: "Você gostou? 1-Sim, 2-Não ou 3-Menu".
+- SE ESCOLHER 1 (CATÁLOGOS): Envie os 21 links e pergunte se gostou.
 [LISTA DE CATÁLOGOS]
 01- BRINCOS DOURADOS E PRATAS: https://photos.app.goo.gl/xhNzkFJZZzubRC7s9
 02- BRINCOS FOSCOS E 2 BANHOS: https://photos.app.goo.gl/JXEUe6Xiw29bVT3y7
@@ -58,18 +66,26 @@ REGRAS DE NEGÓCIO:
 20- BOLSAS E CHAPÉUS: https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
 21- COLARES DE VERÃO: https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
 
-2. SE ESCOLHER "1-SIM": Pergunte a forma de envio (Ônibus ou Correio).
-3. COLETA DE DADOS: Só libere o PIX 37431974000130 após receber Nome, CPF, Endereço completo.
-4. SE ESCOLHER 2: Diga "Meu nome é Cici, vou continuar seu atendimento".
-`;
+- SE ESCOLHER 1 (SIM PARA PEDIDO): Diga: "Para facilitar seu atendimento, por favor me envie as informações completas abaixo". Em seguida, pergunte a forma de envio:
+1-Ônibus,
+2-Correios
+3-Transportadora
+4-Outra.
+- DADOS ÔNIBUS: Peça Nome, Cidade, Placa, Guia, Empresa e Horário.Regra não siga pra o proximo passo se o cliente não preencher tudo
+- DADOS CORREIO/TRANSP: Peça Nome/Empresa, CPF/CNPJ, Endereço completo, CEP, Cidade/Estado.Regra não siga pra o proximo passo se o cliente não preencher tudo
+- APÓS DADOS ENVIADOS: Envie o PIX 37431974000130 e diga: "Para iniciar seu pedido é necessário um sinal no valor de 100,00 reais que é abatido no final da compra. Agora já tenho seus dados, pode enviar o pedido com a quantidade desejada".
 
-async function enviarMenu(sock, jid) {
-  const menu = `🌸 Bem-vinda à Chik Biju 🌸\n\n1 - Catálogos\n2 - Continuar atendimento\n3 - Rastrear meu pedido\n4 - Nota fiscal\n5 - Pagamento\n\nEscolha uma opção:`;
-  await sock.sendMessage(jid, { text: menu });
-}
+
+- SE ESCOLHER 2: Diga que a Cici vai atender.
+- COLETA DE DADOS: Só libere o PIX 37431974000130 após receber todos os dados (Nome, CPF, Endereço, etc).
+- SE ESCOLHER 3 (RASTREIO): Ofereça 1-Ônibus e 2-Correio e chame a Cici.
+- SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais e o romaneio. Depois chame a Cici.
+- SE ESCOLHER 5 (PAGAMENTO): Envie o PIX 37431974000130.
+`;
 
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
+
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
@@ -81,25 +97,25 @@ async function iniciarBot() {
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
-    if (connection === 'open') console.log('✅ BOT ONLINE');
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      if (reason !== DisconnectReason.loggedOut) setTimeout(iniciarBot, 5000);
+      if (reason !== DisconnectReason.loggedOut) setTimeout(() => iniciarBot(), 5000);
     }
-    
+    if (connection === 'open') {
+      console.log('🤖 BOT CHIK BIJU ONLINE');
+      pairingRequested = false;
+    }
+
     if (!state.creds.registered && !pairingRequested) {
-        pairingRequested = true;
-        const num = process.env.PHONE_NUMBER;
-        if (num) {
-            console.log(`Solicitando código para: ${num}`);
-            try {
-                const code = await sock.requestPairingCode(num);
-                console.log(`👉 SEU CÓDIGO: ${code}`);
-            } catch (e) { 
-                console.error("Erro no pareamento:", e);
-                pairingRequested = false; 
-            }
-        }
+      pairingRequested = true;
+      const num = process.env.PHONE_NUMBER;
+      if (!num) return;
+      setTimeout(async () => {
+        try {
+          const code = await sock.requestPairingCode(num);
+          console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
+        } catch (err) { pairingRequested = false; }
+      }, 10000);
     }
   });
 
@@ -107,40 +123,38 @@ async function iniciarBot() {
     const msg = messages[0];
     if (!msg?.message) return;
     const jid = msg.key.remoteJid;
-    if (jid.includes('@g.us') || jid === 'status@broadcast') return;
 
+    // --- LÓGICA DE PAUSA SE VOCÊ RESPONDER ---
     if (msg.key.fromMe) {
+      console.log(`Pausando bot para ${jid} porque você respondeu.`);
       atendimentoHumano[jid] = Date.now();
       return;
     }
-    if (atendimentoHumano[jid] && (Date.now() - atendimentoHumano[jid] < UMA_HORA)) return;
 
-    const texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    
-    // Se não tem histórico, manda o menu e cria a entrada
-    if (!historico[jid]) {
-      historico[jid] = [{ role: 'system', content: SYSTEM_PROMPT }];
-      await enviarMenu(sock, jid);
-      return; 
+    // Verifica se o bot deve ficar quieto (1 hora de silêncio)
+    if (atendimentoHumano[jid] && (Date.now() - atendimentoHumano[jid] < UMA_HORA)) {
+      return;
     }
 
-    if (!texto.trim()) return;
+    const texto = msg.message.conversation || msg.message.extendedTextMessage?.text;
+    if (!texto) return;
+
+    if (!historico[jid]) historico[jid] = [];
     historico[jid].push({ role: 'user', content: texto });
 
     try {
-      const res = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: historico[jid].slice(-10),
-        temperature: 0.4
+      const resposta = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile', // Usei o modelo mais forte
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...historico[jid].slice(-8) // Histórico um pouco maior para não esquecer os dados
+        ],
       });
-
-      const resposta = res.choices[0]?.message?.content;
-      if (resposta) {
-        await sock.sendMessage(jid, { text: resposta });
-        historico[jid].push({ role: 'assistant', content: resposta });
-      }
+      const textoFinal = resposta.choices[0].message.content;
+      await sock.sendMessage(jid, { text: textoFinal });
+      historico[jid].push({ role: 'assistant', content: textoFinal });
     } catch (err) {
-      console.error('ERRO IA:', err.message);
+      console.error('❌ Erro Groq:', err.message);
     }
   });
 }
