@@ -13,7 +13,7 @@ const OpenAI = require('openai');
 
 /* ================= CONFIG ================= */
 
-const SESSION_PATH = '/app/sessao_chikbijuWhatsApppp';
+const SESSION_PATH = '/app/sessao_chikbijuWhatsAp1';
 const UMA_HORA = 60 * 60 * 1000;
 
 let pairingRequested = false;
@@ -360,3 +360,4 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
