@@ -119,14 +119,23 @@ async function iniciarBot() {
     }
   });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
+sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg?.message) return;
+    
+    // Pega o tempo da mensagem (em segundos) e o tempo atual
+    const msgTime = msg.messageTimestamp;
+    const agora = Math.floor(Date.now() / 1000);
+
+    // Se a mensagem for mais velha que 30 segundos, ignoramos (evita ler histórico)
+    if (agora - msgTime > 30) return;
+
     const jid = msg.key.remoteJid;
 
-    // --- LÓGICA DE PAUSA SE VOCÊ RESPONDER ---
+    // --- LÓGICA DE PAUSA CORRIGIDA ---
     if (msg.key.fromMe) {
-      console.log(`Pausando bot para ${jid} porque você respondeu.`);
+      // Só pausa se você enviar a mensagem DEPOIS que o bot já estiver online
+      console.log(`Pausando bot para ${jid} porque você enviou uma mensagem nova.`);
       atendimentoHumano[jid] = Date.now();
       return;
     }
@@ -144,10 +153,10 @@ async function iniciarBot() {
 
     try {
       const resposta = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile', // Usei o modelo mais forte
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-8) // Histórico um pouco maior para não esquecer os dados
+          ...historico[jid].slice(-8)
         ],
       });
       const textoFinal = resposta.choices[0].message.content;
@@ -160,3 +169,4 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
