@@ -4,7 +4,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
-} = require('@whiskeysockets/baileies');
+} = require('@whiskeysockets/baileys'); // Corrigido aqui
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
@@ -26,16 +26,16 @@ const groq = new OpenAI({
 });
 
 const SYSTEM_PROMPT = `
-VOCÊ É A ASSISTENTE VIRTUAL DA CHIK BIJU. FOCO EM VENDAS DE JOIAS PARA EMPREENDEDORAS.
+VOCÊ É A ASSISTENTE VIRTUAL DA CHIK BIJU.
 SEJA EXTREMAMENTE HUMANA, PACIENTE E EMPÁTICA.
 
 DIRETRIZES:
 - PROIBIDO: amor, querida, flor, linda, anjo, paixão, vida, coração. Use "Empreendedora".
-- NUNCA use termos íntimos. Seja profissional.
+- NUNCA use termos íntimos.
 
 REGRAS DE NEGÓCIO:
 1. SE ESCOLHER 1 (CATÁLOGOS): Envie os 21 links abaixo e pergunte: "Você gostou? 1-Sim, 2-Não ou 3-Menu".
-[LINKS]
+[LISTA DE CATÁLOGOS]
 01- BRINCOS DOURADOS E PRATAS: https://photos.app.goo.gl/xhNzkFJZZzubRC7s9
 02- BRINCOS FOSCOS E 2 BANHOS: https://photos.app.goo.gl/JXEUe6Xiw29bVT3y7
 03- BRINCOS DE FESTAS E PEDRARIAS: https://photos.app.goo.gl/ttpcch49bZmJxMNb9
@@ -58,10 +58,8 @@ REGRAS DE NEGÓCIO:
 20- BOLSAS E CHAPÉUS: https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
 21- COLARES DE VERÃO: https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
 
-2. SE ESCOLHER "1-SIM" (PEDIDO): Pergunte a forma de envio (Ônibus, Correio, Transportadora).
-3. COLETA DE DADOS: Só libere o PIX 37431974000130 após receber os dados completos.
-- ÔNIBUS: Nome, Cidade, Placa, Guia, Empresa, Horário.
-- CORREIO: Nome, CPF/CNPJ, Endereço, CEP, Cidade/Estado.
+2. SE ESCOLHER "1-SIM": Pergunte a forma de envio (Ônibus ou Correio).
+3. COLETA DE DADOS: Só libere o PIX 37431974000130 após receber Nome, CPF, Endereço completo.
 4. SE ESCOLHER 2: Diga "Meu nome é Cici, vou continuar seu atendimento".
 `;
 
@@ -81,7 +79,7 @@ async function iniciarBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update) => {
+  sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'open') console.log('✅ BOT ONLINE');
     if (connection === 'close') {
@@ -93,12 +91,14 @@ async function iniciarBot() {
         pairingRequested = true;
         const num = process.env.PHONE_NUMBER;
         if (num) {
-            setTimeout(async () => {
-                try {
-                  const code = await sock.requestPairingCode(num);
-                  console.log(`👉 SEU CÓDIGO: ${code}`);
-                } catch (e) { pairingRequested = false; }
-            }, 10000);
+            console.log(`Solicitando código para: ${num}`);
+            try {
+                const code = await sock.requestPairingCode(num);
+                console.log(`👉 SEU CÓDIGO: ${code}`);
+            } catch (e) { 
+                console.error("Erro no pareamento:", e);
+                pairingRequested = false; 
+            }
         }
     }
   });
@@ -109,7 +109,6 @@ async function iniciarBot() {
     const jid = msg.key.remoteJid;
     if (jid.includes('@g.us') || jid === 'status@broadcast') return;
 
-    // LÓGICA DE PAUSA (Se você responder, o bot para)
     if (msg.key.fromMe) {
       atendimentoHumano[jid] = Date.now();
       return;
@@ -117,23 +116,22 @@ async function iniciarBot() {
     if (atendimentoHumano[jid] && (Date.now() - atendimentoHumano[jid] < UMA_HORA)) return;
 
     const texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    if (!texto.trim()) return;
-
-    // SE FOR A PRIMEIRA MENSAGEM DO CLIENTE
+    
+    // Se não tem histórico, manda o menu e cria a entrada
     if (!historico[jid]) {
       historico[jid] = [{ role: 'system', content: SYSTEM_PROMPT }];
       await enviarMenu(sock, jid);
-      // Não damos return aqui para que a IA já possa processar se ele digitou algo junto
-      if (texto.length < 2) return; 
+      return; 
     }
 
+    if (!texto.trim()) return;
     historico[jid].push({ role: 'user', content: texto });
 
     try {
       const res = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
-        messages: historico[jid].slice(-8),
-        temperature: 0.3
+        messages: historico[jid].slice(-10),
+        temperature: 0.4
       });
 
       const resposta = res.choices[0]?.message?.content;
