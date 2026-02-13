@@ -4,13 +4,13 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason
-} = require('@whiskeysockets/baileys');
+} = require('@whiskeysockets/baileies');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
 /* ================= CONFIG ================= */
-const SESSION_PATH = '/app/sessao_chikbijuWhatsAppp1';
+const SESSION_PATH = '/app/sessao_chikbijuWhatsApp1';
 const UMA_HORA = 60 * 60 * 1000;
 let pairingRequested = false;
 const historico = {};
@@ -25,15 +25,13 @@ const groq = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1'
 });
 
-/* ================= PROMPT COMPLETO (REGRAS DE OURO) ================= */
 const SYSTEM_PROMPT = `
-VOCÊ É A ASSISTENTE VIRTUAL DA CHIK BIJU. FOCO EM VENDAS DE JOIAS.
+VOCÊ É A ASSISTENTE VIRTUAL DA CHIK BIJU. FOCO EM VENDAS DE JOIAS PARA EMPREENDEDORAS.
 SEJA EXTREMAMENTE HUMANA, PACIENTE E EMPÁTICA.
 
-DIRETRIZES DE PERSONALIDADE:
-- NUNCA trate o cliente de forma ríspida.
-- NUNCA encerre sem perguntar se pode ajudar em algo mais.
+DIRETRIZES:
 - PROIBIDO: amor, querida, flor, linda, anjo, paixão, vida, coração. Use "Empreendedora".
+- NUNCA use termos íntimos. Seja profissional.
 
 REGRAS DE NEGÓCIO:
 1. SE ESCOLHER 1 (CATÁLOGOS): Envie os 21 links abaixo e pergunte: "Você gostou? 1-Sim, 2-Não ou 3-Menu".
@@ -60,20 +58,18 @@ REGRAS DE NEGÓCIO:
 20- BOLSAS E CHAPÉUS: https://photos.app.goo.gl/yDYrx1a6kLE3Sbys8
 21- COLARES DE VERÃO: https://photos.app.goo.gl/4xHJBhzQ4C3uWdQL9
 
-2. SE ESCOLHER "1-SIM" (PEDIDO): Pergunte a forma de envio (Ônibus, Correio, etc).
-3. COLETA DE DADOS: Só libere o PIX 37431974000130 após receber TODOS os dados.
+2. SE ESCOLHER "1-SIM" (PEDIDO): Pergunte a forma de envio (Ônibus, Correio, Transportadora).
+3. COLETA DE DADOS: Só libere o PIX 37431974000130 após receber os dados completos.
 - ÔNIBUS: Nome, Cidade, Placa, Guia, Empresa, Horário.
 - CORREIO: Nome, CPF/CNPJ, Endereço, CEP, Cidade/Estado.
 4. SE ESCOLHER 2: Diga "Meu nome é Cici, vou continuar seu atendimento".
 `;
 
-/* ================= FUNÇÕES AUXILIARES ================= */
 async function enviarMenu(sock, jid) {
   const menu = `🌸 Bem-vinda à Chik Biju 🌸\n\n1 - Catálogos\n2 - Continuar atendimento\n3 - Rastrear meu pedido\n4 - Nota fiscal\n5 - Pagamento\n\nEscolha uma opção:`;
   await sock.sendMessage(jid, { text: menu });
 }
 
-/* ================= BOT ================= */
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
   const sock = makeWASocket({
@@ -85,7 +81,7 @@ async function iniciarBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', async (update) => {
+  sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'open') console.log('✅ BOT ONLINE');
     if (connection === 'close') {
@@ -93,14 +89,15 @@ async function iniciarBot() {
       if (reason !== DisconnectReason.loggedOut) setTimeout(iniciarBot, 5000);
     }
     
-    // GERAÇÃO DO CÓDIGO DE PAREAMENTO
     if (!state.creds.registered && !pairingRequested) {
         pairingRequested = true;
         const num = process.env.PHONE_NUMBER;
         if (num) {
             setTimeout(async () => {
-                const code = await sock.requestPairingCode(num);
-                console.log(`👉 SEU CÓDIGO: ${code}`);
+                try {
+                  const code = await sock.requestPairingCode(num);
+                  console.log(`👉 SEU CÓDIGO: ${code}`);
+                } catch (e) { pairingRequested = false; }
             }, 10000);
         }
     }
@@ -112,7 +109,7 @@ async function iniciarBot() {
     const jid = msg.key.remoteJid;
     if (jid.includes('@g.us') || jid === 'status@broadcast') return;
 
-    // 1. LÓGICA DE PAUSA (Se VOCÊ responder no WhatsApp, o bot para por 1h)
+    // LÓGICA DE PAUSA (Se você responder, o bot para)
     if (msg.key.fromMe) {
       atendimentoHumano[jid] = Date.now();
       return;
@@ -122,11 +119,12 @@ async function iniciarBot() {
     const texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
     if (!texto.trim()) return;
 
-    // 2. LÓGICA DE IA (Substituindo o Switch Case falho)
+    // SE FOR A PRIMEIRA MENSAGEM DO CLIENTE
     if (!historico[jid]) {
-      historico[jid] = [];
+      historico[jid] = [{ role: 'system', content: SYSTEM_PROMPT }];
       await enviarMenu(sock, jid);
-      return;
+      // Não damos return aqui para que a IA já possa processar se ele digitou algo junto
+      if (texto.length < 2) return; 
     }
 
     historico[jid].push({ role: 'user', content: texto });
@@ -134,8 +132,8 @@ async function iniciarBot() {
     try {
       const res = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...historico[jid].slice(-6)],
-        temperature: 0.5
+        messages: historico[jid].slice(-8),
+        temperature: 0.3
       });
 
       const resposta = res.choices[0]?.message?.content;
