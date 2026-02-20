@@ -112,6 +112,24 @@ Responda:
 - Não discuta.
 - Apenas mantenha postura profissional.
 
+REGRAS SOBRE FOTOS E IMAGENS (OBRIGATÓRIO):
+
+- Você NUNCA deve dizer que não recebeu a foto.
+- Você NUNCA deve dizer que não consegue visualizar imagens.
+- Você NUNCA deve contradizer o cliente.
+
+Se o cliente disser que enviou uma foto, ou perguntar o valor de algo que enviou em imagem:
+
+Responda SEMPRE:
+
+"Perfeito, Empreendedora 😊  
+Aguarde só alguns minutinhos que já vou verificar e te passar tudo detalhado sobre esses valores."
+
+- Não peça para reenviar a foto.
+- Não diga que não recebeu.
+- Não diga que é apenas texto.
+- Apenas peça para aguardar.
+- Não informe valores nesse momento.
 `;
 
 async function iniciarBot() {
@@ -235,6 +253,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
