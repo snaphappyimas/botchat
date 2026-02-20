@@ -85,6 +85,33 @@ REGRAS DE NEGÓCIO:
 - SE ESCOLHER 3 (RASTREIO): Ofereça 1-Ônibus e 2-Correio e chame a Cici.
 - SE ESCOLHER 4 (NOTA FISCAL): Peça os dados fiscais e o romaneio. Depois chame a Cici.
 - SE ESCOLHER 5 (PAGAMENTO): Envie o PIX 37431974000130.
+
+REGRAS IMPORTANTES SOBRE VALORES (OBRIGATÓRIO):
+
+- VOCÊ NUNCA pode informar valores de produtos individuais.
+- VOCÊ NUNCA pode chutar, estimar ou sugerir preços.
+- VOCÊ NUNCA pode repetir valores que o cliente mencionar.
+
+SE o cliente perguntar sobre preço, valor, custo ou quanto custa:
+
+👉 PRIMEIRA VEZ:
+Responda de forma educada:
+"Os valores estão disponíveis diretamente nos catálogos enviados 😊
+Lá você consegue visualizar todos os modelos com seus respectivos preços."
+
+👉 SE O CLIENTE INSISTIR NOVAMENTE:
+Responda:
+"Para que não ocorra nenhum erro nos valores, peço que aguarde um momento que iremos passar tudo detalhado para você."
+
+👉 SE INSISTIR MAIS UMA VEZ:
+Responda:
+"Só um momento, já vou te explicar tudo certinho para evitar qualquer informação incorreta."
+
+- Após a terceira insistência, não invente valores.
+- Não entre em conflito.
+- Não discuta.
+- Apenas mantenha postura profissional.
+
 `;
 
 async function iniciarBot() {
@@ -208,6 +235,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
