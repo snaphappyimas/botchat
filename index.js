@@ -10,6 +10,8 @@ const {
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
+const PORT = process.env.PORT || 8080;
+require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
 const SESSION_PATH = '/tmp/sessao_chik_biju_v4'; 
@@ -163,6 +165,7 @@ async function iniciarBot() {
       pairingRequested = false;
     }
 
+
     if (!state.creds.registered && !pairingRequested) {
       pairingRequested = true;
       const num = process.env.PHONE_NUMBER;
@@ -170,13 +173,16 @@ async function iniciarBot() {
 
       setTimeout(async () => {
         try {
+          console.log(`📡 Solicitando código para: ${num}...`);
           const code = await sock.requestPairingCode(num);
           console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
         } catch (err) {
+          console.log("❌ Erro ao solicitar código:", err);
           pairingRequested = false;
         }
-      }, 10000);
+      }, 20000); 
     }
+    
   });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -257,6 +263,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
