@@ -1,3 +1,4 @@
+console.log("🚀 O BOT ESTÁ TENTANDO INICIAR AGORA..."); // ADICIONE ISSO NA LINHA 1
 require('dotenv').config();
 const fs = require('fs');
 const {
@@ -9,7 +10,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_nova_conexaochatt';
+const SESSION_PATH = '/app/sessao_nova_conexaochattbot';
 const UMA_HORA = 60 * 60 * 1000;
 
 const PALAVRA_PAUSA = "#pausar";
@@ -253,6 +254,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
