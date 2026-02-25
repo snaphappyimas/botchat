@@ -11,17 +11,17 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-// Definindo o caminho da sessão de forma segura
-const SESSION_PATH = path.join(__dirname, 'sessao_chik_nova_v3');
+// MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
+const SESSION_PATH = '/tmp/sessao_chik_biju_v4'; 
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
 
 let pairingRequested = false;
 
-// Cria a pasta se ela não existir
+// Cria a pasta de forma segura
 if (!fs.existsSync(SESSION_PATH)) {
-  console.log("📂 Criando nova pasta de sessão...");
+  console.log("📂 Criando pasta de sessão em /tmp...");
   fs.mkdirSync(SESSION_PATH, { recursive: true });
 }
 
@@ -257,6 +257,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
