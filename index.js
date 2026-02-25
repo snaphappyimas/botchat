@@ -149,12 +149,13 @@ async function iniciarBot() {
   });
 
   sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
+sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      console.log(` socket fechado: ${reason}`);
+      // Se não for logoff, tenta reconectar
       if (reason !== DisconnectReason.loggedOut) {
         setTimeout(() => iniciarBot(), 5000);
       }
@@ -165,24 +166,28 @@ async function iniciarBot() {
       pairingRequested = false;
     }
 
-
+    // Só pede o código se a conexão estiver ESTÁVEL (esperando um pouco)
     if (!state.creds.registered && !pairingRequested) {
       pairingRequested = true;
       const num = process.env.PHONE_NUMBER;
       if (!num) return;
 
+      console.log("⏳ Aguardando estabilização da conexão (40s)...");
+
       setTimeout(async () => {
         try {
-          console.log(`📡 Solicitando código para: ${num}...`);
-          const code = await sock.requestPairingCode(num);
-          console.log(`👉 CÓDIGO DE PAREAMENTO: ${code}`);
+          // VERIFICAÇÃO: Só pede se ainda não estiver registrado
+          if (!sock.authState.creds.registered) {
+            console.log(`📡 Solicitando código para: ${num}...`);
+            const code = await sock.requestPairingCode(num);
+            console.log(`👉 👉 CÓDIGO DE PAREAMENTO: ${code} 👈 👈`);
+          }
         } catch (err) {
-          console.log("❌ Erro ao solicitar código:", err);
-          pairingRequested = false;
+          console.log("❌ Erro ao solicitar código. Tentando novamente em breve...");
+          pairingRequested = false; // Permite tentar de novo no próximo ciclo
         }
-      }, 20000); 
+      }, 40000); // 40 segundos para garantir que o socket está pronto
     }
-    
   });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -263,6 +268,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
