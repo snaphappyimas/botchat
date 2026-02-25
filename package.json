@@ -1,28 +1,18 @@
 {
-  "name": "bot-whatsapp",
-  "version": "1.0.0",
-  "description": "",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "name": "bot-whatsapp-chikbiju",
+  "version": "1.1.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@whiskeysockets/baileys": "^6.6.0",
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
-    "dotenv": "^17.2.3",
-    "fluent-ffmpeg": "^2.1.3",
-    "openai": "^6.16.0",
-    "pdf-parse": "^2.4.5",
-    "pino": "^10.2.0",
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js"
+    "dotenv": "^16.4.5",
+    "openai": "^4.28.0",
+    "pino": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
