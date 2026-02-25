@@ -280,8 +280,8 @@ async function iniciarBot() {
     }
   });
 }
+iniciarBot().catch(err => console.log("Erro ao iniciar:", err));
 
-iniciarBot();
 
 
 
