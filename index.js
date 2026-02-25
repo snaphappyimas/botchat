@@ -137,7 +137,6 @@ Aguarde só alguns minutinhos que já vou verificar e te passar tudo detalhado s
 - Apenas peça para aguardar.
 - Não informe valores nesse momento.
 `;
-
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -145,20 +144,22 @@ async function iniciarBot() {
     auth: state,
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: ['Ubuntu', 'Chrome', '22.0.0']
+    // Mudança importante no browser para evitar erro 405/428
+    browser: ['Mac OS', 'Chrome', '121.0.6167.85'] 
   });
 
   sock.ev.on('creds.update', saveCreds);
-sock.ev.on('connection.update', async (update) => {
+
+  sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      console.log(` socket fechado: ${reason}`);
-      // Se não for logoff, tenta reconectar
-      if (reason !== DisconnectReason.loggedOut) {
-        setTimeout(() => iniciarBot(), 5000);
-      }
+      console.log(`🔌 Conexão fechada. Motivo: ${reason}`);
+      
+      // Se der erro 405 ou 428, reconecta em 2 segundos (mais rápido)
+      const reconectarEm = (reason === 405 || reason === 428) ? 2000 : 5000;
+      setTimeout(() => iniciarBot(), reconectarEm);
     }
 
     if (connection === 'open') {
@@ -166,29 +167,33 @@ sock.ev.on('connection.update', async (update) => {
       pairingRequested = false;
     }
 
-    // Só pede o código se a conexão estiver ESTÁVEL (esperando um pouco)
     if (!state.creds.registered && !pairingRequested) {
       pairingRequested = true;
       const num = process.env.PHONE_NUMBER;
-      if (!num) return;
+      if (!num) {
+        console.log("❌ PHONE_NUMBER não configurado!");
+        return;
+      }
 
-      console.log("⏳ Aguardando estabilização da conexão (40s)...");
+      console.log("⏳ Aguardando sinal do WhatsApp...");
 
       setTimeout(async () => {
         try {
-          // VERIFICAÇÃO: Só pede se ainda não estiver registrado
-          if (!sock.authState.creds.registered) {
-            console.log(`📡 Solicitando código para: ${num}...`);
-            const code = await sock.requestPairingCode(num);
-            console.log(`👉 👉 CÓDIGO DE PAREAMENTO: ${code} 👈 👈`);
-          }
+          // Só tenta se o socket ainda estiver conectado
+          console.log(`📡 Tentando gerar código para: ${num}`);
+          const code = await sock.requestPairingCode(num);
+          console.log(`\n************************************`);
+          console.log(`👉 SEU CÓDIGO: ${code}`);
+          console.log(`************************************\n`);
         } catch (err) {
-          console.log("❌ Erro ao solicitar código. Tentando novamente em breve...");
-          pairingRequested = false; // Permite tentar de novo no próximo ciclo
+          console.log("❌ Erro na requisição. O socket resetou. Tentando novamente...");
+          pairingRequested = false;
         }
-      }, 40000); // 40 segundos para garantir que o socket está pronto
+      }, 15000); 
     }
   });
+
+  // Mantenha o restante do código (sock.ev.on('messages.upsert')...) igual abaixo disso
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
@@ -268,6 +273,7 @@ sock.ev.on('connection.update', async (update) => {
 }
 
 iniciarBot();
+
 
 
 
