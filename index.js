@@ -10,7 +10,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_nova_conexaochattbot';
+const SESSION_PATH = './sessao_conectar_agora';
 const UMA_HORA = 60 * 60 * 1000;
 
 const PALAVRA_PAUSA = "#pausar";
@@ -254,6 +254,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
