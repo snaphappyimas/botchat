@@ -1,6 +1,7 @@
-console.log("🚀 O BOT ESTÁ TENTANDO INICIAR AGORA..."); // ADICIONE ISSO NA LINHA 1
+console.log("🚀 O BOT ESTÁ TENTANDO INICIAR AGORA..."); 
 require('dotenv').config();
 const fs = require('fs');
+const path = require('path');
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -10,15 +11,17 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = './sessao_conectar_agora';
+// Definindo o caminho da sessão de forma segura
+const SESSION_PATH = path.join(__dirname, 'sessao_chik_nova_v3');
 const UMA_HORA = 60 * 60 * 1000;
-
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
 
 let pairingRequested = false;
 
+// Cria a pasta se ela não existir
 if (!fs.existsSync(SESSION_PATH)) {
+  console.log("📂 Criando nova pasta de sessão...");
   fs.mkdirSync(SESSION_PATH, { recursive: true });
 }
 
@@ -254,6 +257,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
