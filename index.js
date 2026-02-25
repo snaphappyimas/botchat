@@ -280,7 +280,11 @@ async function iniciarBot() {
     }
   });
 }
-iniciarBot().catch(err => console.log("Erro ao iniciar:", err));
+console.log("🏁 Chamando a função iniciarBot...");
+iniciarBot().catch(err => {
+    console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
+});
+
 
 
 
