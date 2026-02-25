@@ -5,7 +5,8 @@ const path = require('path');
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  DisconnectReason
+  DisconnectReason,
+  fetchLatestBaileysVersion // Adicione isso aqui
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
@@ -140,12 +141,20 @@ Aguarde só alguns minutinhos que já vou verificar e te passar tudo detalhado s
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
+ // Buscando a versão mais recente do WhatsApp Web para evitar erro 405
+  const { version } = await fetchLatestBaileysVersion();
+
   const sock = makeWASocket({
     auth: state,
+    version, // Força a versão estável
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    // Mudança importante no browser para evitar erro 405/428
-    browser: ['Mac OS', 'Chrome', '121.0.6167.85'] 
+    mobile: false, // Garante que não está tentando usar API de celular
+    browser: ['Mac OS', 'Chrome', '121.0.6167.85'],
+    syncFullHistory: false, // Não baixa histórico, foca na conexão
+    connectTimeoutMs: 60000, // Dá 1 minuto para o socket estabilizar
+    defaultQueryTimeoutMs: 0, 
+    keepAliveIntervalMs: 10000,
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -273,6 +282,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
