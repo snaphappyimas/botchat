@@ -9,7 +9,7 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
 
-const SESSION_PATH = '/app/sessao_cliente_BchatWhatsApp1';
+const SESSION_PATH = '/app/sessao_cliente_BchatWhatsApppp1';
 const UMA_HORA = 60 * 60 * 1000;
 
 const PALAVRA_PAUSA = "#pausar";
@@ -253,6 +253,7 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
 
 
 
