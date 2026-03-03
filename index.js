@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
-const SESSION_PATH = '/tmp/sessao_chik_biju_v1'; 
+const SESSION_PATH = '/tmp/sessao_chik_biju_vv1'; 
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -262,10 +262,10 @@ async function iniciarBot() {
 
     try {
       const resposta = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
+        model: 'llama-3.1-8b-instant',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-8)
+          ...historico[jid].slice(-5)
         ],
       });
 
@@ -284,6 +284,7 @@ console.log("🏁 Chamando a função iniciarBot...");
 iniciarBot().catch(err => {
     console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
 });
+
 
 
 
