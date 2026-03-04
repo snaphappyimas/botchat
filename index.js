@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
-const SESSION_PATH = '/tmp/sessao_chik_biju_v1c1'; 
+const SESSION_PATH = '/tmp/sessao_chik_biju_v2c1'; 
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -125,8 +125,17 @@ REGRAS SOBRE FOTOS E IMAGENS (OBRIGATÓRIO):
 - Você NUNCA deve dizer que não consegue visualizar imagens.
 - Você NUNCA deve contradizer o cliente.
 
-Se o cliente disser que enviou uma foto, ou perguntar o valor de algo que enviou em imagem:
+- REGRAS DE EXECUÇÃO:
+1. Responda APENAS ao que foi perguntado. 
+2. Se o cliente estiver em um fluxo de envio de dados, NÃO envie o menu principal novamente até que o fluxo acabe, só envie se ele pedir ou for primeira mensagem.
+3. Se o cliente enviar um CEP, apenas confirme o recebimento e peça o próximo dado. Não tente validar endereços externos.
 
+- REGRA DE COLETA (ESTRITA):
+Quando pedir dados (CPF, CEP, Endereço), aja como um formulário. 
+Recebeu o dado? Diga: "Recebido. Agora, por favor, envie o [PRÓXIMO DADO]". 
+Não faça comentários sobre a cidade ou o bairro, apenas colete.
+
+Se o cliente disser que enviou uma foto, ou perguntar o valor de algo que enviou em imagem:
 Responda SEMPRE:
 
 "Perfeito, Empreendedora 😊  
@@ -213,6 +222,12 @@ async function iniciarBot() {
     if (agora - msgTime > 30) return;
 
     const jid = msg.key.remoteJid;
+/* ============================================================
+       🛡️ BLOQUEIO DE GRUPOS: Adicione exatamente aqui!
+    ============================================================ */
+    if (jid.endsWith('@g.us')) {
+        return; // O bot para aqui e não processa nada de grupos
+    }
 
     const texto =
       msg.message.conversation ||
@@ -265,7 +280,7 @@ async function iniciarBot() {
         model: 'llama-3.1-8b-instant',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-5)
+          ...historico[jid].slice(-8)
         ],
       });
 
@@ -284,6 +299,7 @@ console.log("🏁 Chamando a função iniciarBot...");
 iniciarBot().catch(err => {
     console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
 });
+
 
 
 
