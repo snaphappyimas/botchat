@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
-const SESSION_PATH = '/tmp/sessao_limpei_nome_v1';
+const SESSION_PATH = '/tmp/sessao_limpei_nome_vv1';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
