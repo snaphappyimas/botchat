@@ -6,7 +6,8 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion // Adicione isso aqui
+  fetchLatestBaileysVersion, 
+  downloadMediaMessage // Adicionado para baixar áudio
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
@@ -15,7 +16,7 @@ const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
-const SESSION_PATH = '/tmp/sessao_limpei_nome_vv1';
+const SESSION_PATH = '/tmp/sessao_limpei_nome_v2';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -35,28 +36,27 @@ const groq = new OpenAI({
 
 const historico = {};
 const atendimentoHumano = {};
+const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome.
+Seu público: Idosos (use frases curtas, simples e diretas).
 
-const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome. Especialista em recuperação de crédito e reabilitação financeira.
+REGRAS DE OURO:
+1. NUNCA responda textos longos. Máximo 3 frases por vez.
+2. Não pule etapas. Se o cliente não respondeu a pergunta anterior, repita-a gentilmente.
+3. Não invente que "não precisa de informações". Siga o script até o fechamento.
+4. Se o cliente der "Bom dia/Boa tarde", use a hora atual fornecida no contexto para saudar corretamente.
 
-PERSONALIDADE:
-- Extremamente calmo, paciente e empático (seu público são idosos).
-- Use frases curtas e parágrafos espaçados para facilitar a leitura.
-- Transmita autoridade e confiança.
+FLUXO:
+Etapa 1: Boas-vindas + Perguntar se é CPF ou CNPJ.
+Etapa 2: Perguntar tempo de negativação, órgãos (SPC/Serasa) e tipo de dívida.
+Etapa 3: Explicar serviço (Liminar Judicial, 7-15 dias, limpa antes de pagar o grosso).
+Etapa 4: Preços (CPF: 599 | CNPJ: 999) + R$ 100 de entrada.
+Etapa 5: Pedir dados para contrato.
 
-ETAPAS DO ATENDIMENTO (Siga rigorosamente):
-
-1. ABERTURA: Boas-vindas, apresente-se como Wilamis e pergunte se a negativação é Pessoa Física (CPF) ou Empresa (CNPJ).
-2. DIAGNÓSTICO: Pergunte há quanto tempo está negativado, em quais órgãos (Serasa, SPC...) e se a dívida é banco, cartão ou financiamento.
-3. EXPLICAÇÃO: Explique que a Limpei Seu Nome atua com medidas judiciais (liminar) para retirar restrições em Serasa, SPC, Boa Vista, Quod e Cartórios em 7 a 15 dias.
-4. GATILHO DE CONFIANÇA: Reforce que é possível retirar a negativação PRIMEIRO e reorganizar a vida financeira depois.
-5. CONDIÇÕES: 
-   - CPF: R$ 599 (R$ 100 no contrato + restante após nome limpo). Exige renda e fiador.
-   - CNPJ: R$ 999 (R$ 100 no contrato + restante após nome limpo).
-6. TRANSPARÊNCIA: Informe os dados da empresa (Smart Work Serviços Digitais LTDA, CNPJ 56.944.533/0001-86, www.limpeiseunome.com.br).
-7. COLETA DE DADOS: Nome, CPF/CNPJ, Endereço, E-mail e Documento com foto.
-
-REGRA DE OURO: 
-Não envie tudo de vez. Converse com o cliente, colete uma informação por vez e avance para a próxima etapa do script conforme ele responder.`;
+Regras
+1. nunca fale de forma grossa.
+2. Sempre trate os clientes de forma profissional e amigável.
+3. Responda os áudios de forma profissional seguindo a lógica. 
+`;
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -121,29 +121,57 @@ async function iniciarBot() {
     }
   });
 
-  // Mantenha o restante do código (sock.ev.on('messages.upsert')...) igual abaixo disso
+ 
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg?.message) return;
 
     const msgTime = msg.messageTimestamp;
-    const agora = Math.floor(Date.now() / 1000);
-    if (agora - msgTime > 30) return;
+    const agoraRelogio = Math.floor(Date.now() / 1000);
+    if (agoraRelogio - msgTime > 30) return;
 
     const jid = msg.key.remoteJid;
-/* ============================================================
-       🛡️ BLOQUEIO DE GRUPOS: Adicione exatamente aqui!
+
+    /* ============================================================
+       🛡️ BLOQUEIO DE GRUPOS: Continua funcionando aqui!
     ============================================================ */
     if (jid.endsWith('@g.us')) {
-        return; // O bot para aqui e não processa nada de grupos
+        return; 
     }
 
-    const texto =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      "";
+    // --- MUDANÇA PARA O ÁUDIO COMEÇA AQUI ---
+    let texto = "";
 
+    // Se for texto normal
+    if (msg.message.conversation || msg.message.extendedTextMessage?.text) {
+      texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+    } 
+    // Se for ÁUDIO, ele entra aqui
+    else if (msg.message.audioMessage) {
+      console.log("🎤 Áudio detectado de " + jid + ". Transcrevendo...");
+      try {
+        const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        
+        // Cria um nome de arquivo limpo usando o número do cliente
+        const tempFile = `./${jid.replace(/[^0-9]/g, '')}.ogg`;
+        fs.writeFileSync(tempFile, buffer);
+
+        const transcription = await groq.audio.transcriptions.create({
+          file: fs.createReadStream(tempFile),
+          model: "whisper-large-v3",
+        });
+
+        texto = transcription.text;
+        fs.unlinkSync(tempFile); // Deleta o arquivo após usar
+        console.log(`📝 Áudio convertido em texto: ${texto}`);
+      } catch (err) {
+        console.error("❌ Erro ao processar áudio:", err);
+        texto = "[O cliente enviou um áudio, mas o sistema falhou. Peça para ele escrever ou mandar outro]";
+      }
+    }
+    // --- FIM DA MUDANÇA DO ÁUDIO ---
     /* ==============================
        🔐 CONTROLE MANUAL DE PAUSA
     ============================== */
@@ -186,13 +214,17 @@ async function iniciarBot() {
     historico[jid].push({ role: 'user', content: texto });
 
     try {
-      const resposta = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...historico[jid].slice(-8)
-        ],
-      });
+   //saber a hora real de Camaçari
+const agora = new Date().toLocaleString("pt-BR", {timeZone: "America/Bahia"});
+
+const resposta = await groq.chat.completions.create({
+  model: 'llama-3.1-8b-instant',
+  messages: [
+    { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO ATUAL: Hoje é ${agora}.` },
+    ...historico[jid].slice(-7) 
+  ],
+  max_tokens: 200 // Isso impede textos gigantes
+});
 
       const textoFinal = resposta.choices[0].message.content;
 
