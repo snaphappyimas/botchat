@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
+
 const SESSION_PATH = '/tmp/sessao_limpei_nome_v2';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
@@ -37,6 +38,42 @@ const groq = new OpenAI({
 const historico = {};
 const atendimentoHumano = {};
 const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome.
+
+Seu objetivo é seguir o SCRIPT ELITE de forma rigorosa.
+
+ESTILO DE ESCRITA:
+- Use frases curtas.
+- QUEBRE LINHAS entre as frases (estilo WhatsApp).
+- Nunca mande parágrafos longos.
+
+ETAPA 1 (ABERTURA OBRIGATÓRIA) - Se o cliente der "Oi", "Bom dia" ou iniciar a conversa, responda exatamente neste formato:
+"Olá, tudo bem?
+
+Meu nome é Wilamis Brasil, sou Diretor Comercial da Limpei Seu Nome.
+
+A gente atua em todo o Brasil com recuperação de crédito.
+
+Limpamos seu nome por meio de processo judicial com liminar, normalmente entre 7 a 15 dias, com garantia contratual de 12 meses.
+
+Atuamos em todos os birôs:
+Serasa, SPC, Boa Vista, Quod e Cartórios.
+
+Agora me diz…
+seu caso é CPF ou empresa?"
+
+ETAPA 2 (DIAGNÓSTICO):
+Após a resposta do cliente, diga: "Perfeito… me fala rapidinho: faz quanto tempo que tá negativado? sabe onde tá sujo?"
+Assim que ele responder, use obrigatoriamente: "Pelo que você me falou… seu caso tem potencial sim."
+
+ETAPA 3 (EXPLICAÇÃO E VALORES):
+- Explique que é jurídico (Código de Defesa do Consumidor) e usa liminar.
+- Preço CPF: R$ 799 (Sinal R$ 100).
+- Preço CNPJ: R$ 999 (Sinal R$ 200).
+- SEMPRE pergunte ao final: "Até aqui fez sentido pra você?"
+
+TRATAMENTO DE OBJEÇÕES:
+- Se falarem "É golpe?": Cite o CNPJ 56.944.533/0001-86 e a garantia em contrato.
+- Se falarem "Eu devo": Diga que a lei permite revisão e suspensão em muitos casos.
 Seu público: Idosos (use frases curtas, simples e diretas).
 
 REGRAS DE OURO:
@@ -52,9 +89,12 @@ Etapa 3: Explicar serviço (Liminar Judicial, 7-15 dias, limpa antes de pagar o 
 Etapa 4: Preços (CPF: 599 | CNPJ: 999) + R$ 100 de entrada.
 Etapa 5: Pedir dados para contrato.
 
+
 Regras
 1. nunca fale de forma grossa.
 2. Sempre trate os clientes de forma profissional e amigável.
+3. Responda os áudios de forma profissional seguindo a lógica.
+4. Nunca tente vender tudo de uma vez. Colete uma informação por vez e espere o cliente responder. 
 3. Responda os áudios de forma profissional seguindo a lógica. 
 `;
 async function iniciarBot() {
@@ -133,28 +173,17 @@ async function iniciarBot() {
 
     const jid = msg.key.remoteJid;
 
-    /* ============================================================
-       🛡️ BLOQUEIO DE GRUPOS: Continua funcionando aqui!
-    ============================================================ */
-    if (jid.endsWith('@g.us')) {
-        return; 
-    }
+    if (jid.endsWith('@g.us')) return; 
 
-    // --- MUDANÇA PARA O ÁUDIO COMEÇA AQUI ---
     let texto = "";
 
-    // Se for texto normal
     if (msg.message.conversation || msg.message.extendedTextMessage?.text) {
       texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
     } 
-    // Se for ÁUDIO, ele entra aqui
     else if (msg.message.audioMessage) {
       console.log("🎤 Áudio detectado de " + jid + ". Transcrevendo...");
       try {
-        const { downloadMediaMessage } = require('@whiskeysockets/baileys');
         const buffer = await downloadMediaMessage(msg, 'buffer', {});
-        
-        // Cria um nome de arquivo limpo usando o número do cliente
         const tempFile = `./${jid.replace(/[^0-9]/g, '')}.ogg`;
         fs.writeFileSync(tempFile, buffer);
 
@@ -164,48 +193,31 @@ async function iniciarBot() {
         });
 
         texto = transcription.text;
-        fs.unlinkSync(tempFile); // Deleta o arquivo após usar
+        fs.unlinkSync(tempFile);
         console.log(`📝 Áudio convertido em texto: ${texto}`);
       } catch (err) {
         console.error("❌ Erro ao processar áudio:", err);
-        texto = "[O cliente enviou um áudio, mas o sistema falhou. Peça para ele escrever ou mandar outro]";
+        texto = "[Erro ao processar áudio]";
       }
     }
-    // --- FIM DA MUDANÇA DO ÁUDIO ---
-    /* ==============================
-       🔐 CONTROLE MANUAL DE PAUSA
-    ============================== */
 
     if (msg.key.fromMe) {
       const textoLower = texto.toLowerCase().trim();
-
       if (textoLower === PALAVRA_PAUSA) {
         atendimentoHumano[jid] = Date.now();
         console.log(`🛑 Bot pausado manualmente para ${jid}`);
       }
-
       if (textoLower === PALAVRA_VOLTAR) {
         delete atendimentoHumano[jid];
         console.log(`✅ Bot reativado manualmente para ${jid}`);
       }
-
       return;
     }
 
-    /* ==============================
-       ⏸️ VERIFICA SE ESTÁ EM PAUSA
-    ============================== */
-
     if (atendimentoHumano[jid]) {
       const tempoDecorrido = Date.now() - atendimentoHumano[jid];
-
-      if (tempoDecorrido < UMA_HORA) {
-        console.log(`⏸️ Bot está pausado para ${jid}`);
-        return;
-      } else {
-        console.log(`✅ Pausa automática encerrada para ${jid}`);
-        delete atendimentoHumano[jid];
-      }
+      if (tempoDecorrido < UMA_HORA) return;
+      else delete atendimentoHumano[jid];
     }
 
     if (!texto) return;
@@ -214,36 +226,60 @@ async function iniciarBot() {
     historico[jid].push({ role: 'user', content: texto });
 
     try {
-   //saber a hora real de Camaçari
-const agora = new Date().toLocaleString("pt-BR", {timeZone: "America/Bahia"});
+      const agoraBahia = new Date().toLocaleString("pt-BR", {timeZone: "America/Bahia"});
 
-const resposta = await groq.chat.completions.create({
-  model: 'llama-3.1-8b-instant',
-  messages: [
-    { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO ATUAL: Hoje é ${agora}.` },
-    ...historico[jid].slice(-7) 
-  ],
-  max_tokens: 200 // Isso impede textos gigantes
-});
+      const resposta = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO ATUAL: Hoje é ${agoraBahia}.` },
+          ...historico[jid].slice(-7) 
+        ],
+        max_tokens: 300 
+      });
 
       const textoFinal = resposta.choices[0].message.content;
 
+      // 1. Envia Texto
       await sock.sendMessage(jid, { text: textoFinal });
+
+      // 2. Envia Áudio 1
+      if (textoFinal.includes("Diretor Comercial") && textoFinal.includes("CPF ou empresa")) {
+        await sock.sendMessage(jid, { 
+          audio: { url: "./audio/audio1.ogg" },
+          mimetype: 'audio/ogg; codecs=opus', 
+          ptt: true 
+        });
+      }
+
+      // 3. Envia Áudio 2
+      if (textoFinal.includes("potencial sim")) {
+        await sock.sendMessage(jid, { 
+          audio: { url: "./audio/audio2.ogg" },
+          mimetype: 'audio/ogg; codecs=opus', 
+          ptt: true 
+        });
+      }
+
+      // 4. Envia Imagem
+      if (textoFinal.includes("preparo seu contrato") || textoFinal.includes("me manda seus dados")) {
+        await sock.sendMessage(jid, { 
+          image: { url: "./img/divulgacao.png" }, 
+          caption: `Tudo pronto para iniciarmos seu processo!\n\n✔ Prazo médio de 7 a 15 dias.\n✔ Garantia contratual de 12 meses.\n✔ Pagamento após o nome limpo.`
+        });
+      }
 
       historico[jid].push({ role: 'assistant', content: textoFinal });
 
     } catch (err) {
-      console.error('❌ Erro Groq:', err.message);
+      console.error('❌ Erro no processamento:', err.message);
     }
-  });
+  }); 
 }
+
 console.log("🏁 Chamando a função iniciarBot...");
 iniciarBot().catch(err => {
     console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
 });
-
-
-
 
 
 
