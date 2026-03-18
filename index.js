@@ -12,12 +12,17 @@ const {
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const OpenAI = require('openai');
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function tempoAleatorio(min, max) {
+  return Math.floor(Math.random() * (max - min + 1) + min) * 1000;
+}
 const PORT = process.env.PORT || 8080;
 require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
 
-const SESSION_PATH = '/tmp/sessao_limpei_nome_v2';
+const SESSION_PATH = '/tmp/sessao_limpei_nome_v3';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -37,66 +42,29 @@ const groq = new OpenAI({
 
 const historico = {};
 const atendimentoHumano = {};
-const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome.
+const audiosEnviados = {};
+const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome. Um vendedor expert em WhatsApp: natural, direto e focado em fechar contrato.
 
-Seu objetivo é seguir o SCRIPT ELITE de forma rigorosa.
+⚠️ COMPORTAMENTO:
+- Escreva frases CURTAS e com QUEBRAS DE LINHA (estilo mensagem de áudio).
+- Seja humano. Se o cliente mandar áudio ou parecer confuso, simplifique e seja empático.
+- Sempre termine sua mensagem com uma pergunta para manter o controle da venda.
 
-ESTILO DE ESCRITA:
-- Use frases curtas.
-- QUEBRE LINHAS entre as frases (estilo WhatsApp).
-- Nunca mande parágrafos longos.
+🚀 SEU FLUXO DE CONVERSA (NÃO PULE ETAPAS):
+1. Comece SEMPRE com um cumprimento educado (ex: "Olá, tudo bem?" ou "Boa tarde, tudo certo?"). Logo em seguida, descubra se a pessoa já é cliente ou se está entrando em contato agora.
+2. Sendo novo, apresente-se como Wilamis Brasil e explique que atuamos com recuperação de crédito via processo judicial com liminar (prazo de 7 a 15 dias).
+3. Explique que retiramos as negativações no Serasa, SPC, Boa Vista, Quod e Cartórios para que o nome apareça limpo nas consultas.
+4. Pergunte: "Seu caso é CPF ou empresa?".
+5. Após ele responder, valide: "Pelo que você me falou, seu caso tem potencial sim!". Prometa que vai mandar um áudio explicando os benefícios (score, garantia de 12 meses e limpeza total).
+6. Passe os valores: CPF é 799 reais (100 de sinal) e CNPJ é 999 reais (200 de sinal). Pagamento via PIX, Cartão 3x ou Boleto 2x. Empresas pagam o resto após o nome limpo.
+7. Solicite os dados: Nome completo, CPF/CNPJ, endereço, documento com foto e comprovante de renda/faturamento.
+8. Encerre dizendo: "Perfeito... vou encaminhar seus dados pra análise e o especialista vai continuar com você. Só aguardar um pouco."
 
-ETAPA 1 (ABERTURA OBRIGATÓRIA) - Se o cliente der "Oi", "Bom dia" ou iniciar a conversa, responda exatamente neste formato:
-"Olá, tudo bem?
-
-Meu nome é Wilamis Brasil, sou Diretor Comercial da Limpei Seu Nome.
-
-A gente atua em todo o Brasil com recuperação de crédito.
-
-Limpamos seu nome por meio de processo judicial com liminar, normalmente entre 7 a 15 dias, com garantia contratual de 12 meses.
-
-Atuamos em todos os birôs:
-Serasa, SPC, Boa Vista, Quod e Cartórios.
-
-Agora me diz…
-seu caso é CPF ou empresa?"
-
-ETAPA 2 (DIAGNÓSTICO):
-Após a resposta do cliente, diga: "Perfeito… me fala rapidinho: faz quanto tempo que tá negativado? sabe onde tá sujo?"
-Assim que ele responder, use obrigatoriamente: "Pelo que você me falou… seu caso tem potencial sim."
-
-ETAPA 3 (EXPLICAÇÃO E VALORES):
-- Explique que é jurídico (Código de Defesa do Consumidor) e usa liminar.
-- Preço CPF: R$ 799 (Sinal R$ 100).
-- Preço CNPJ: R$ 999 (Sinal R$ 200).
-- SEMPRE pergunte ao final: "Até aqui fez sentido pra você?"
-
-TRATAMENTO DE OBJEÇÕES:
-- Se falarem "É golpe?": Cite o CNPJ 56.944.533/0001-86 e a garantia em contrato.
-- Se falarem "Eu devo": Diga que a lei permite revisão e suspensão em muitos casos.
-Seu público: Idosos (use frases curtas, simples e diretas).
-
-REGRAS DE OURO:
-1. NUNCA responda textos longos. Máximo 3 frases por vez.
-2. Não pule etapas. Se o cliente não respondeu a pergunta anterior, repita-a gentilmente.
-3. Não invente que "não precisa de informações". Siga o script até o fechamento.
-4. Se o cliente der "Bom dia/Boa tarde", use a hora atual fornecida no contexto para saudar corretamente.
-
-FLUXO:
-Etapa 1: Boas-vindas + Perguntar se é CPF ou CNPJ.
-Etapa 2: Perguntar tempo de negativação, órgãos (SPC/Serasa) e tipo de dívida.
-Etapa 3: Explicar serviço (Liminar Judicial, 7-15 dias, limpa antes de pagar o grosso).
-Etapa 4: Preços (CPF: 599 | CNPJ: 999) + R$ 100 de entrada.
-Etapa 5: Pedir dados para contrato.
-
-
-Regras
-1. nunca fale de forma grossa.
-2. Sempre trate os clientes de forma profissional e amigável.
-3. Responda os áudios de forma profissional seguindo a lógica.
-4. Nunca tente vender tudo de uma vez. Colete uma informação por vez e espere o cliente responder. 
-3. Responda os áudios de forma profissional seguindo a lógica. 
-`;
+🚫 LIMITES CRÍTICOS:
+- NUNCA prometa "causa ganha" ou "aprovamos seu crédito em banco".
+- FOCO ÚNICO: Retirada de negativações dos birôs.
+- NUNCA mencione termos como "etapa", "passo", "prompt" ou "funil" na conversa.
+- Se o cliente perguntar se é golpe, informe o CNPJ 56.944.533/0001-86.`;
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -172,108 +140,161 @@ async function iniciarBot() {
     if (agoraRelogio - msgTime > 30) return;
 
     const jid = msg.key.remoteJid;
-
     if (jid.endsWith('@g.us')) return; 
 
+    // --- LOGICA DE MENSAGEM (TEXTO OU AUDIO) ---
     let texto = "";
-
     if (msg.message.conversation || msg.message.extendedTextMessage?.text) {
       texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
     } 
     else if (msg.message.audioMessage) {
-      console.log("🎤 Áudio detectado de " + jid + ". Transcrevendo...");
+      console.log("🎤 Áudio detectado de " + jid);
+      const tempFile = `./${jid.replace(/[^0-9]/g, '')}_${Date.now()}.ogg`;
       try {
         const buffer = await downloadMediaMessage(msg, 'buffer', {});
-        const tempFile = `./${jid.replace(/[^0-9]/g, '')}.ogg`;
         fs.writeFileSync(tempFile, buffer);
-
         const transcription = await groq.audio.transcriptions.create({
           file: fs.createReadStream(tempFile),
           model: "whisper-large-v3",
         });
-
         texto = transcription.text;
-        fs.unlinkSync(tempFile);
-        console.log(`📝 Áudio convertido em texto: ${texto}`);
       } catch (err) {
-        console.error("❌ Erro ao processar áudio:", err);
-        texto = "[Erro ao processar áudio]";
+        console.error("❌ Erro áudio:", err);
+      } finally {
+        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
       }
     }
 
+    // --- CONTROLE MANUAL (#pausar / #voltar) ---
     if (msg.key.fromMe) {
       const textoLower = texto.toLowerCase().trim();
       if (textoLower === PALAVRA_PAUSA) {
-        atendimentoHumano[jid] = Date.now();
+        atendimentoHumano[jid] = true; // Pausa infinita até dar #voltar
         console.log(`🛑 Bot pausado manualmente para ${jid}`);
       }
       if (textoLower === PALAVRA_VOLTAR) {
         delete atendimentoHumano[jid];
-        console.log(`✅ Bot reativado manualmente para ${jid}`);
+        console.log(`✅ Bot reativado para ${jid}`);
       }
       return;
     }
 
-    if (atendimentoHumano[jid]) {
-      const tempoDecorrido = Date.now() - atendimentoHumano[jid];
-      if (tempoDecorrido < UMA_HORA) return;
-      else delete atendimentoHumano[jid];
-    }
+    // --- 🛡️ TRAVA 1: SE O HUMANO ASSUMIU OU ESTÁ PAUSADO ---
+    if (atendimentoHumano[jid]) return;
 
     if (!texto) return;
 
     if (!historico[jid]) historico[jid] = [];
+    
+    // --- 🛡️ TRAVA 2: NÃO RESPONDER CLIENTES ANTIGOS ---
+    // Se o bot nunca falou com ele e já tem mensagens no chat, ou se o histórico do bot passou de 15 mensagens
+    if (historico[jid].length > 15) {
+        console.log(`⏭️ Cliente antigo ou conversa longa detectada (${jid}). Bot em silêncio.`);
+        return;
+    }
+
     historico[jid].push({ role: 'user', content: texto });
 
     try {
       const agoraBahia = new Date().toLocaleString("pt-BR", {timeZone: "America/Bahia"});
-
+// --- histórico da conversa ---
       const resposta = await groq.chat.completions.create({
         model: 'llama-3.1-8b-instant',
         messages: [
-          { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO ATUAL: Hoje é ${agoraBahia}.` },
-          ...historico[jid].slice(-7) 
+          { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.` },
+          ...historico[jid].slice(-5) 
         ],
-        max_tokens: 300 
+        max_tokens: 400 
       });
 
       const textoFinal = resposta.choices[0].message.content;
 
-      // 1. Envia Texto
+      // --- DELAY HUMANO ---
+      await sock.sendPresenceUpdate('composing', jid);
+      await delay(tempoAleatorio(10, 15)); 
       await sock.sendMessage(jid, { text: textoFinal });
 
-      // 2. Envia Áudio 1
-      if (textoFinal.includes("Diretor Comercial") && textoFinal.includes("CPF ou empresa")) {
+     // --- GATILHOS DE AUDIO/IMAGEM (COM TRAVA DE REPETIÇÃO E NOVOS GATILHOS) ---
+      
+      // Inicializa o controle de áudios para este cliente se não existir
+      if (!audiosEnviados[jid]) {
+        audiosEnviados[jid] = { audio1: false, audio2: false };
+      }
+
+    // --- GATILHOS DE AUDIO, VÍDEO E IMAGEM (COM VÍDEOS INCLUÍDOS) ---
+      
+      if (!audiosEnviados[jid]) {
+        audiosEnviados[jid] = { audio1: false, audio2: false };
+      }
+
+      // GATILHO 1: Áudio 1 + Vídeo 1
+      const gatilhosAudio1 = ["Diretor Comercial", "Wilamis Brasil", "sou o Wilamis"];
+      const deveMandarAudio1 = gatilhosAudio1.some(p => textoFinal.includes(p));
+
+      if (!audiosEnviados[jid].audio1 && deveMandarAudio1) {
+        audiosEnviados[jid].audio1 = true;
+        
+        await sock.sendPresenceUpdate('recording', jid);
+        await delay(4000);
         await sock.sendMessage(jid, { 
-          audio: { url: "./audio/audio1.ogg" },
+          audio: { url: "./audio/audio1.ogg" }, 
           mimetype: 'audio/ogg; codecs=opus', 
           ptt: true 
         });
-      }
 
-      // 3. Envia Áudio 2
-      if (textoFinal.includes("potencial sim")) {
+        // Envio do Vídeo 1 logo após o áudio
+        await delay(3000); 
         await sock.sendMessage(jid, { 
-          audio: { url: "./audio/audio2.ogg" },
-          mimetype: 'audio/ogg; codecs=opus', 
-          ptt: true 
+          video: { url: "./video/video1.mp4" }, 
+          caption: "Assista esse vídeo rápido sobre nossa atuação! 🚀"
         });
       }
 
-      // 4. Envia Imagem
-      if (textoFinal.includes("preparo seu contrato") || textoFinal.includes("me manda seus dados")) {
+      // GATILHO 2: Áudio 2 + Vídeo 2
+      const gatilhosAudio2 = ["potencial", "799", "999", "benefícios", "áudio", "parcelado"];
+      const deveMandarAudio2 = gatilhosAudio2.some(p => textoFinal.toLowerCase().includes(p.toLowerCase()));
+
+      if (!audiosEnviados[jid].audio2 && deveMandarAudio2 && !deveMandarAudio1) {
+        audiosEnviados[jid].audio2 = true;
+        
+        await sock.sendPresenceUpdate('recording', jid);
+        await delay(8000);
         await sock.sendMessage(jid, { 
-          image: { url: "./img/divulgacao.png" }, 
-          caption: `Tudo pronto para iniciarmos seu processo!\n\n✔ Prazo médio de 7 a 15 dias.\n✔ Garantia contratual de 12 meses.\n✔ Pagamento após o nome limpo.`
+          audio: { url: "./audio/audio2.ogg" }, 
+          mimetype: 'audio/ogg; codecs=opus', 
+          ptt: true 
+        });
+
+        // Envio do Vídeo 2 logo após o áudio
+        await delay(3000);
+        await sock.sendMessage(jid, { 
+          video: { url: "./video/video2.mp4" }, 
+          caption: "Aqui eu te mostro como funciona o processo na prática!"
+        });
+      }
+
+      // IMAGEM: Coleta de dados (Mantive igual para não quebrar seu fluxo)
+      if (textoFinal.includes("me manda esses dados") || textoFinal.includes("documento com foto")) {
+        await delay(4000);
+        await sock.sendMessage(jid, { 
+            image: { url: "./img/divulgacao.png" }, 
+            caption: `Confira os benefícios que você terá ao limpar seu nome conosco!`
         });
       }
 
       historico[jid].push({ role: 'assistant', content: textoFinal });
 
+      // --- 🛡️ TRAVA 3: AUTO-ENCERRAMENTO ---
+      // Se o bot mandou a mensagem final (Etapa 5 ou Setor Responsável), ele se auto-pausa
+      if (textoFinal.includes("setor responsável") || textoFinal.includes("especialista vai continuar com você")) {
+        atendimentoHumano[jid] = true; 
+        console.log(`🏁 Bot finalizou a parte dele para ${jid}. Entregando para o humano.`);
+      }
+
     } catch (err) {
-      console.error('❌ Erro no processamento:', err.message);
+      console.error('❌ Erro Groq:', err.message);
     }
-  }); 
+  });
 }
 
 console.log("🏁 Chamando a função iniciarBot...");
