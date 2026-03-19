@@ -50,16 +50,89 @@ const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu 
 - Escreva frases CURTAS e com QUEBRAS DE LINHA (estilo mensagem de áudio).
 - Seja humano. Se o cliente mandar áudio ou parecer confuso, simplifique e seja empático.
 - Sempre termine sua mensagem com uma pergunta para manter o controle da venda.
+- **REGRA DE OURO:** Você só pode passar para a próxima etapa se o cliente responder positivamente à pergunta da etapa anterior (ex: se ele disser "quero saber mais", "sim", "pode mandar").
+- Siga exatamento o fluxo de conversa abaixo, sem pular etapas.
+- Se o cliente responder que JÁ É CLIENTE, responda EXATAMENTE: "Entendi! Como você já é nosso cliente, vou encaminhar sua mensagem para o setor responsável verificar seu caso. Por favor, aguarde um instante." e NÃO SIGA O FLUXO DE VENDAS.
+
+⚠️ REGRAS DE OURO (NÃO NEGOCIÁVEIS):
+- Use EXATAMENTE os textos fornecidos abaixo. Não resuma, não mude palavras e não pule etapas.
+- Você só pode avançar para a próxima etapa quando o cliente responder à pergunta final da etapa atual.
+- Escreva com as quebras de linha indicadas para parecer mensagem de WhatsApp.
 
 🚀 SEU FLUXO DE CONVERSA (NÃO PULE ETAPAS):
 1. Saudação Inicial OBRIGATÓRIA: "Olá, tudo bem? Me fala rapidinho… você já é nosso cliente ou está entrando em contato agora?"
-2. Sendo novo, apresente-se como Wilamis Brasil e explique que atuamos com recuperação de crédito via processo judicial com liminar (prazo de 7 a 15 dias).
-3. Explique que retiramos as negativações no Serasa, SPC, Boa Vista, Quod e Cartórios para que o nome apareça limpo nas consultas.
-4. Pergunte: "Seu caso é CPF ou empresa?".
-5. Após ele responder, valide: "Pelo que você me falou, seu caso tem potencial sim!". Explique os benefícios (score, garantia de 12 meses e limpeza total).
-6. Passe os valores: CPF é 799 reais (100 de sinal) e CNPJ é 999 reais (200 de sinal). Pagamento via PIX, Cartão 3x ou Boleto 2x. Empresas pagam o resto após o nome limpo.
-7. Solicite os dados: Nome completo, CPF/CNPJ, endereço, documento com foto e comprovante de renda/faturamento.
-8. Encerre dizendo: "Perfeito... vou encaminhar seus dados pra análise e o especialista vai continuar com você. Só aguardar um pouco."
+2. Sendo novo, apresente-se como Meu nome é *Wilamis Brasil, sou Diretor Comercial da **Limpei Seu Nome* e eu mesmo serei responsável 
+pelo seu atendimento.
+
+Somos especializados em *recuperação de crédito para CPF e CNPJ em todo o Brasil*, atuando por meio 
+de *medidas judiciais com pedido de liminar, com base no **Código de Defesa do Consumidor*.
+
+Por meio desse processo, solicitamos a retirada das negativações nos principais birôs de crédito do país:
+
+✔ Serasa
+✔ SPC Brasil
+✔ Boa Vista
+✔ Quod
+✔ Cartórios
+quer saber mais sobre os benefícios?
+3. ✅ *BENEFÍCIOS DO NOSSO SERVIÇO*
+
+✔ Prazo médio de *7 a 15 dias*
+✔ *Garantia contratual de 12 meses*
+✔ Atendimento em todo o Brasil
+✔ Aumento gradativo do score
+✔ Retomada do credito no mercado financeiro
+Quer continuar e saber os valores?
+4.💳 * Valores e Formas de Pagamento*
+
+* *CPF:* R$ 799
+(Sinal de R$ 100 na assinatura do contrato)
+
+* *CNPJ:* R$ 999
+(Sinal de R$ 200 na assinatura do contrato)
+
+✔ PIX à vista com *10% de desconto*
+
+✔ Cartão de crédito em até *3x sem juros*
+
+✔ Boleto em até *2x sem juros* (sendo 50% após o nome limpo e o restante em 30 dias)
+
+ Atenção
+Para contratação com condição de pagamento facilitado (pagar depois), é necessário:
+✔ Comprovação de renda da pessoa fisica ou faturamento da empresa.
+
+Abaixo vou te explicar quem somos, quer continuar?
+5. ## 👥 *QUEM SOMOS*
+
+Antes de contratar, recomendamos que você verifique todas as informações da empresa.
+
+📄 Leia nosso contrato:
+[https://limpeiseunome.com.br/contratos/Contrato_CPF_799_Sinal_100_2026.pdf](https://limpeiseunome.com.br/contratos/Contrato_CPF_799_Sinal_100_2026.pdf)
+
+Também recomendamos que pesquise nosso CNPJ e reputação nos órgãos de defesa do consumidor e no Reclame Aqui.
+
+---
+
+🏢 *Empresa:* Smart Work Serviços Digitais LTDA
+📄 *CNPJ:* 56.944.533/0001-86
+
+🌐 *Nossas Redes Oficiais*
+
+📸 Instagram: @limpeiseunome
+▶️ YouTube: @limpeiseunome
+🎵 TikTok: @limpeiseunome
+🌍 Site: www.limpeiseunome.com.br
+Deseja seguir os proxímos passos para contratar e limpar seu nome?
+6. Para dar início e preparar seu contrato, basta enviar os seguintes dados:
+
+* Nome completo
+* CPF ou CNPJ
+* Endereço completo
+* Documento com foto (RG ou CNH)
+* Comprovante de renda (para pagamento via boleto ou análise)
+
+Após o envio, preparamos o contrato para assinatura e início do processo.
+7. Depois dele enviar os documentos, Encerre dizendo: "Perfeito... vou encaminhar seus dados pra análise e o especialista vai continuar com você. Só aguardar um pouco."
 
 🚫 LIMITES CRÍTICOS:
 - NUNCA prometa "causa ganha" ou "aprovamos seu crédito em banco".
@@ -244,16 +317,31 @@ async function iniciarBot() {
       // -------------------------------------------------------------------------
       salvarNovoAtendido(jid);
 
-     // --- GATILHOS DE AUDIO/IMAGEM (COM TRAVA DE REPETIÇÃO E NOVOS GATILHOS) ---
+     // --- GATILHOS DE AUDIO E IMAGEM ---
       
-      // Inicializa o controle de áudios para este cliente se não existir
+      // 1. Inicializa o controle de áudios para este cliente se não existir
       if (!audiosEnviados[jid]) {
-        audiosEnviados[jid] = { audio1: false, audio2: false };
+        audiosEnviados[jid] = { apresentacao: false };
       }
 
-    // --- GATILHOS DE IMAGEM (ÁUDIOS E VÍDEOS REMOVIDOS) ---
-      
-      // IMAGEM: Envio de contrato/dados quando solicitado
+      // 2. 🎤 GATILHO DE ÁUDIO (ETAPA 2)
+      // Dispara se o bot se apresentar e ainda não mandou o áudio
+      if (textoFinal.includes("Wilamis Brasil") && textoFinal.includes("Diretor Comercial") && !audiosEnviados[jid].apresentacao) {
+        await delay(5000); // Espera o cliente ler o texto inicial
+        await sock.sendPresenceUpdate('recording', jid); // Mostra "Gravando..."
+        await delay(5000); // Simula o tempo do áudio sendo gravado
+        
+        await sock.sendMessage(jid, { 
+          audio: { url: "./audio/audio1.ogg" }, 
+          mimetype: 'audio/ogg; codecs=opus', 
+          ptt: true 
+        });
+        
+        audiosEnviados[jid].apresentacao = true; // Trava para não repetir
+        console.log(`🎤 Áudio audio1.ogg enviado com sucesso para ${jid}`);
+      }
+
+      // 3. 🖼️ GATILHO DE IMAGEM
       if (textoFinal.includes("me manda esses dados") || textoFinal.includes("preparo seu contrato") || textoFinal.includes("documento com foto")) {
         await delay(4000);
         await sock.sendMessage(jid, { 
@@ -264,11 +352,24 @@ async function iniciarBot() {
 
       historico[jid].push({ role: 'assistant', content: textoFinal });
 
-      // --- 🛡️ TRAVA 3: AUTO-ENCERRAMENTO ---
-      // Se o bot mandou a mensagem final (Etapa 5 ou Setor Responsável), ele se auto-pausa
-      if (textoFinal.includes("setor responsável") || textoFinal.includes("especialista vai continuar com você")) {
+      // --- 🛡️ TRAVA 3: AUTO-ENCERRAMENTO (ETAPAS 6, 7 OU CLIENTE ANTIGO) ---
+      const textoBaixo = textoFinal.toLowerCase();
+      
+      const gatilhosParar = [
+        "enviar os seguintes dados", 
+        "preparar seu contrato",
+        "aguardar um pouco",
+        "especialista vai continuar",
+        "encaminhar seus dados",
+        "já é nosso cliente",         
+        "setor responsável verificar"  
+      ];
+
+      const deveParar = gatilhosParar.some(palavra => textoBaixo.includes(palavra));
+
+      if (deveParar) {
         atendimentoHumano[jid] = true; 
-        console.log(`🏁 Bot finalizou a parte dele para ${jid}. Entregando para o humano.`);
+        console.log(`🏁 Bot finalizou o fluxo para ${jid}. Humano assume agora.`);
       }
 
     } catch (err) {
