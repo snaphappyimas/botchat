@@ -22,7 +22,7 @@ require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
 
-const SESSION_PATH = '/tmp/sessao_limpei_nome_v3';
+const SESSION_PATH = '/tmp/sessao_limpei_nome_vis3';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -46,16 +46,17 @@ const audiosEnviados = {};
 const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome. Um vendedor expert em WhatsApp: natural, direto e focado em fechar contrato.
 
 ⚠️ COMPORTAMENTO:
+- Comece TODA primeira interação EXATAMENTE com esta frase: "Olá, tudo bem? Me fala rapidinho… você já é nosso cliente ou está entrando em contato agora?"
 - Escreva frases CURTAS e com QUEBRAS DE LINHA (estilo mensagem de áudio).
 - Seja humano. Se o cliente mandar áudio ou parecer confuso, simplifique e seja empático.
 - Sempre termine sua mensagem com uma pergunta para manter o controle da venda.
 
 🚀 SEU FLUXO DE CONVERSA (NÃO PULE ETAPAS):
-1. Comece SEMPRE com um cumprimento educado (ex: "Olá, tudo bem?" ou "Boa tarde, tudo certo?"). Logo em seguida, descubra se a pessoa já é cliente ou se está entrando em contato agora.
+1. Saudação Inicial OBRIGATÓRIA: "Olá, tudo bem? Me fala rapidinho… você já é nosso cliente ou está entrando em contato agora?"
 2. Sendo novo, apresente-se como Wilamis Brasil e explique que atuamos com recuperação de crédito via processo judicial com liminar (prazo de 7 a 15 dias).
 3. Explique que retiramos as negativações no Serasa, SPC, Boa Vista, Quod e Cartórios para que o nome apareça limpo nas consultas.
 4. Pergunte: "Seu caso é CPF ou empresa?".
-5. Após ele responder, valide: "Pelo que você me falou, seu caso tem potencial sim!". Prometa que vai mandar um áudio explicando os benefícios (score, garantia de 12 meses e limpeza total).
+5. Após ele responder, valide: "Pelo que você me falou, seu caso tem potencial sim!". Explique os benefícios (score, garantia de 12 meses e limpeza total).
 6. Passe os valores: CPF é 799 reais (100 de sinal) e CNPJ é 999 reais (200 de sinal). Pagamento via PIX, Cartão 3x ou Boleto 2x. Empresas pagam o resto após o nome limpo.
 7. Solicite os dados: Nome completo, CPF/CNPJ, endereço, documento com foto e comprovante de renda/faturamento.
 8. Encerre dizendo: "Perfeito... vou encaminhar seus dados pra análise e o especialista vai continuar com você. Só aguardar um pouco."
@@ -65,6 +66,21 @@ const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu 
 - FOCO ÚNICO: Retirada de negativações dos birôs.
 - NUNCA mencione termos como "etapa", "passo", "prompt" ou "funil" na conversa.
 - Se o cliente perguntar se é golpe, informe o CNPJ 56.944.533/0001-86.`;
+
+const ARQUIVO_CONTATOS = './contatos_atendidos.json';
+
+function carregarAtendidos() {
+  if (!fs.existsSync(ARQUIVO_CONTATOS)) return [];
+  return JSON.parse(fs.readFileSync(ARQUIVO_CONTATOS, 'utf-8'));
+}
+
+function salvarNovoAtendido(jid) {
+  let atendidos = carregarAtendidos();
+  if (!atendidos.includes(jid)) {
+    atendidos.push(jid);
+    fs.writeFileSync(ARQUIVO_CONTATOS, JSON.stringify(atendidos));
+  }
+}
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
@@ -142,6 +158,15 @@ async function iniciarBot() {
     const jid = msg.key.remoteJid;
     if (jid.endsWith('@g.us')) return; 
 
+    // -------------------------------------------------------------------------
+    // [PONTO 2] A TRAVA ANTI-CLIENTE ANTIGO (ADICIONADA AQUI)
+    // -------------------------------------------------------------------------
+    const jaAtendidos = carregarAtendidos();
+    if (jaAtendidos.includes(jid) && (!historico[jid] || historico[jid].length === 0)) {
+        console.log(`🚫 Pulando contato que já está na base de dados: ${jid}`);
+        return;
+    }
+
     // --- LOGICA DE MENSAGEM (TEXTO OU AUDIO) ---
     let texto = "";
     if (msg.message.conversation || msg.message.extendedTextMessage?.text) {
@@ -211,8 +236,13 @@ async function iniciarBot() {
 
       // --- DELAY HUMANO ---
       await sock.sendPresenceUpdate('composing', jid);
-      await delay(tempoAleatorio(10, 15)); 
+      await delay(tempoAleatorio(15, 20)); 
       await sock.sendMessage(jid, { text: textoFinal });
+
+      // -------------------------------------------------------------------------
+      // [PONTO 3] SALVAR O CONTATO (ADICIONADA AQUI)
+      // -------------------------------------------------------------------------
+      salvarNovoAtendido(jid);
 
      // --- GATILHOS DE AUDIO/IMAGEM (COM TRAVA DE REPETIÇÃO E NOVOS GATILHOS) ---
       
@@ -221,60 +251,10 @@ async function iniciarBot() {
         audiosEnviados[jid] = { audio1: false, audio2: false };
       }
 
-    // --- GATILHOS DE AUDIO, VÍDEO E IMAGEM (COM VÍDEOS INCLUÍDOS) ---
+    // --- GATILHOS DE IMAGEM (ÁUDIOS E VÍDEOS REMOVIDOS) ---
       
-      if (!audiosEnviados[jid]) {
-        audiosEnviados[jid] = { audio1: false, audio2: false };
-      }
-
-      // GATILHO 1: Áudio 1 + Vídeo 1
-      const gatilhosAudio1 = ["Diretor Comercial", "Wilamis Brasil", "sou o Wilamis"];
-      const deveMandarAudio1 = gatilhosAudio1.some(p => textoFinal.includes(p));
-
-      if (!audiosEnviados[jid].audio1 && deveMandarAudio1) {
-        audiosEnviados[jid].audio1 = true;
-        
-        await sock.sendPresenceUpdate('recording', jid);
-        await delay(4000);
-        await sock.sendMessage(jid, { 
-          audio: { url: "./audio/audio1.ogg" }, 
-          mimetype: 'audio/ogg; codecs=opus', 
-          ptt: true 
-        });
-
-        // Envio do Vídeo 1 logo após o áudio
-        await delay(3000); 
-        await sock.sendMessage(jid, { 
-          video: { url: "./video/video1.mp4" }, 
-          caption: "Assista esse vídeo rápido sobre nossa atuação! 🚀"
-        });
-      }
-
-      // GATILHO 2: Áudio 2 + Vídeo 2
-      const gatilhosAudio2 = ["potencial", "799", "999", "benefícios", "áudio", "parcelado"];
-      const deveMandarAudio2 = gatilhosAudio2.some(p => textoFinal.toLowerCase().includes(p.toLowerCase()));
-
-      if (!audiosEnviados[jid].audio2 && deveMandarAudio2 && !deveMandarAudio1) {
-        audiosEnviados[jid].audio2 = true;
-        
-        await sock.sendPresenceUpdate('recording', jid);
-        await delay(8000);
-        await sock.sendMessage(jid, { 
-          audio: { url: "./audio/audio2.ogg" }, 
-          mimetype: 'audio/ogg; codecs=opus', 
-          ptt: true 
-        });
-
-        // Envio do Vídeo 2 logo após o áudio
-        await delay(3000);
-        await sock.sendMessage(jid, { 
-          video: { url: "./video/video2.mp4" }, 
-          caption: "Aqui eu te mostro como funciona o processo na prática!"
-        });
-      }
-
-      // IMAGEM: Coleta de dados (Mantive igual para não quebrar seu fluxo)
-      if (textoFinal.includes("me manda esses dados") || textoFinal.includes("documento com foto")) {
+      // IMAGEM: Envio de contrato/dados quando solicitado
+      if (textoFinal.includes("me manda esses dados") || textoFinal.includes("preparo seu contrato") || textoFinal.includes("documento com foto")) {
         await delay(4000);
         await sock.sendMessage(jid, { 
             image: { url: "./img/divulgacao.png" }, 
@@ -301,7 +281,6 @@ console.log("🏁 Chamando a função iniciarBot...");
 iniciarBot().catch(err => {
     console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
 });
-
 
 
 
