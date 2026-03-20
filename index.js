@@ -22,7 +22,7 @@ require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
 // MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
 
-const SESSION_PATH = '/tmp/sessao_limpei_nome_viss3';
+const SESSION_PATH = '/tmp/sessao_limpei_nome_vviss3';
 const UMA_HORA = 60 * 60 * 1000;
 const PALAVRA_PAUSA = "#pausar";
 const PALAVRA_VOLTAR = "#voltar";
@@ -46,7 +46,7 @@ const audiosEnviados = {};
 const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome. Um vendedor expert em WhatsApp: natural, direto e focado em fechar contrato.
 
 ⚠️ COMPORTAMENTO:
-- Comece TODA primeira interação EXATAMENTE com esta frase: "Olá, tudo bem? Me fala rapidinho… você já é nosso cliente ou está entrando em contato agora?"
+- Comece TODA primeira interação EXATAMENTE com esta frase: "Olá 🤗".
 - Escreva frases CURTAS e com QUEBRAS DE LINHA (estilo mensagem de áudio).
 - Seja humano. Se o cliente mandar áudio ou parecer confuso, simplifique e seja empático.
 - Sempre termine sua mensagem com uma pergunta para manter o controle da venda.
@@ -307,48 +307,52 @@ async function iniciarBot() {
 
       const textoFinal = resposta.choices[0].message.content;
 
-      // --- DELAY HUMANO ---
-      await sock.sendPresenceUpdate('composing', jid);
-      await delay(tempoAleatorio(15, 20)); 
-      await sock.sendMessage(jid, { text: textoFinal });
+   
 
       // -------------------------------------------------------------------------
       // [PONTO 3] SALVAR O CONTATO (ADICIONADA AQUI)
       // -------------------------------------------------------------------------
       salvarNovoAtendido(jid);
+           // --- GATILHOS DE AUDIO E IMAGEM ---//
+     // --- LÓGICA DE ENVIO ORGANIZADA POR ETAPA (COM TRAVAS E LOGS) ---
 
-     // --- GATILHOS DE AUDIO E IMAGEM ---
-      
-      // 1. Inicializa o controle de áudios para este cliente se não existir
-      if (!audiosEnviados[jid]) {
-        audiosEnviados[jid] = { apresentacao: false };
-      }
+    // 🎤 ETAPA 1: SAUDAÇÃO (Áudio de Entrada primeiro)
+    if (textoFinal.includes("Olá 🤗") && !audiosEnviados[jid]?.entrada) {
+        await sock.sendMessage(jid, { audio: { url: "./audio/audiodeentrada.ogg" }, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+        await delay(4000); 
+        await sock.sendMessage(jid, { text: textoFinal });
+        
+        if (!audiosEnviados[jid]) audiosEnviados[jid] = {};
+        audiosEnviados[jid].entrada = true; // TRAVA DE SEGURANÇA
+        console.log(`🎤 Áudio audiodeentrada.ogg enviado com sucesso para ${jid}`);
+    }
 
-      // 2. 🎤 GATILHO DE ÁUDIO (ETAPA 2)
-      // Dispara se o bot se apresentar e ainda não mandou o áudio
-      if (textoFinal.includes("Wilamis Brasil") && textoFinal.includes("Diretor Comercial") && !audiosEnviados[jid].apresentacao) {
-        await delay(5000); // Espera o cliente ler o texto inicial
-        await sock.sendPresenceUpdate('recording', jid); // Mostra "Gravando..."
-        await delay(5000); // Simula o tempo do áudio sendo gravado
+    // 🎤 ETAPA 2: APRESENTAÇÃO (Audio 1 primeiro)
+    else if (textoFinal.includes("Wilamis Brasil") && !audiosEnviados[jid]?.apresentacao) {
+        await sock.sendMessage(jid, { audio: { url: "./audio/audio1.ogg" }, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+        await delay(5000); 
+        await sock.sendMessage(jid, { text: textoFinal });
         
-        await sock.sendMessage(jid, { 
-          audio: { url: "./audio/audio1.ogg" }, 
-          mimetype: 'audio/ogg; codecs=opus', 
-          ptt: true 
-        });
-        
-        audiosEnviados[jid].apresentacao = true; // Trava para não repetir
+        if (!audiosEnviados[jid]) audiosEnviados[jid] = {};
+        audiosEnviados[jid].apresentacao = true; // TRAVA DE SEGURANÇA
         console.log(`🎤 Áudio audio1.ogg enviado com sucesso para ${jid}`);
-      }
+    }
 
-      // 3. 🖼️ GATILHO DE IMAGEM
-      if (textoFinal.includes("me manda esses dados") || textoFinal.includes("preparo seu contrato") || textoFinal.includes("documento com foto")) {
+    // ✉️ TODAS AS OUTRAS ETAPAS (Delay de digitação normal)
+    else {
+        await sock.sendPresenceUpdate('composing', jid);
+        await delay(tempoAleatorio(10, 15)); 
+        await sock.sendMessage(jid, { text: textoFinal });
+    }
+
+    // 🖼️ GATILHO DE IMAGEM
+    if (textoFinal.includes("me manda esses dados") || textoFinal.includes("preparo seu contrato")) {
         await delay(4000);
         await sock.sendMessage(jid, { 
             image: { url: "./img/divulgacao.png" }, 
             caption: `Confira os benefícios que você terá ao limpar seu nome conosco!`
         });
-      }
+    }
 
       historico[jid].push({ role: 'assistant', content: textoFinal });
 
@@ -356,13 +360,15 @@ async function iniciarBot() {
       const textoBaixo = textoFinal.toLowerCase();
       
       const gatilhosParar = [
-        "enviar os seguintes dados", 
-        "preparar seu contrato",
-        "aguardar um pouco",
-        "especialista vai continuar",
-        "encaminhar seus dados",
-        "já é nosso cliente",         
-        "setor responsável verificar"  
+        "enviar os seguintes dados",    // Trava na Etapa 6
+        "preparar seu contrato",       // Trava na Etapa 6
+        "aguardar um pouco",           // Trava na Etapa 7
+        "especialista vai continuar",  // Trava na Etapa 7
+        "encaminhar seus dados",       // Trava na Etapa 7
+        
+        // TRAVA DE CLIENTE ANTIGO (Baseada na frase que o BOT diz)
+        "setor responsável verificar", // O Bot só diz isso se o cara for cliente
+        "aguarde um instante"          // O Bot só diz isso se o cara for cliente
       ];
 
       const deveParar = gatilhosParar.some(palavra => textoBaixo.includes(palavra));
