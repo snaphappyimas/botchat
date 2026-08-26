@@ -15,4 +15,5 @@ temp_*.mp3
 
 # Logs
 npm-debug.log*
-pm2.log
+pm2.logsessao_local/
+node_modules/
