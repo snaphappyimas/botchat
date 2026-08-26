@@ -1,424 +1,548 @@
-console.log("🚀 O BOT ESTÁ TENTANDO INICIAR AGORA..."); 
-require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
+console.log("🚀 O BOT ESTÁ TENTANDO INICIAR AGORA...");
+
+require("dotenv").config();
+
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+
 const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion, 
-  downloadMediaMessage // Adicionado para baixar áudio
-} = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
-const pino = require('pino');
-const OpenAI = require('openai');
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
+
+const { Boom } = require("@hapi/boom");
+const pino = require("pino");
+const OpenAI = require("openai");
+
+// -----------------------------------------------------------------------------
+// CONFIGURAÇÕES GERAIS
+// -----------------------------------------------------------------------------
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function tempoAleatorio(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min) * 1000;
 }
+
 const PORT = process.env.PORT || 8080;
-require('http').createServer((req, res) => res.end('Bot Online')).listen(PORT);
 
-// MUDANÇA AQUI: Usando a pasta /tmp para evitar erros de permissão do Railway
+const PALAVRA_PAUSA = "#certo";
+const PALAVRA_VOLTAR = "#se tiver dúvidas, me chama";
 
-const SESSION_PATH = '/tmp/sessao_limpei_nome_vviss3';
-const UMA_HORA = 60 * 60 * 1000;
-const PALAVRA_PAUSA = "#pausar";
-const PALAVRA_VOLTAR = "#voltar";
+// Sessão salva dentro da pasta do projeto.
+const SESSION_PATH = path.join(__dirname, "sessao_local");
+
+// Arquivo dos contatos atendidos salvo dentro da pasta do projeto.
+const ARQUIVO_CONTATOS = path.join(
+  __dirname,
+  "contatos_atendidos.json"
+);
 
 let pairingRequested = false;
+let reconexaoAgendada = false;
 
-// Cria a pasta de forma segura
+// -----------------------------------------------------------------------------
+// VALIDAÇÃO DO .ENV
+// -----------------------------------------------------------------------------
+
+const GROQ_API_KEY = (process.env.GROQ_API_KEY || "")
+  .replace(/['"]+/g, "")
+  .trim();
+
+const PHONE_NUMBER = (process.env.PHONE_NUMBER || "")
+  .replace(/\D/g, "")
+  .trim();
+
+if (!GROQ_API_KEY) {
+  console.error("");
+  console.error("❌ GROQ_API_KEY não foi encontrada no arquivo .env");
+  console.error("");
+  console.error("Confira se o seu .env possui:");
+  console.error("GROQ_API_KEY=sua_chave_da_groq");
+  console.error("");
+  process.exit(1);
+}
+
+if (!PHONE_NUMBER) {
+  console.error("");
+  console.error("❌ PHONE_NUMBER não foi encontrado no arquivo .env");
+  console.error("");
+  console.error("Confira se o seu .env possui:");
+  console.error("PHONE_NUMBER=5571999999999");
+  console.error("");
+  process.exit(1);
+}
+
+// -----------------------------------------------------------------------------
+// CRIA A PASTA LOCAL DA SESSÃO
+// -----------------------------------------------------------------------------
+
 if (!fs.existsSync(SESSION_PATH)) {
-  console.log("📂 Criando pasta de sessão em /tmp...");
+  console.log("📂 Criando pasta de sessão local...");
   fs.mkdirSync(SESSION_PATH, { recursive: true });
 }
 
+// -----------------------------------------------------------------------------
+// CLIENTE GROQ USANDO A BIBLIOTECA OPENAI
+// -----------------------------------------------------------------------------
+
 const groq = new OpenAI({
-  apiKey: (process.env.GROQ_API_KEY || "").replace(/['"]+/g, '').trim(),
-  baseURL: 'https://api.groq.com/openai/v1'
+  apiKey: GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1",
 });
+
+console.log("⚡ Inteligência artificial configurada: GROQ");
+console.log(`📱 Número configurado: ${PHONE_NUMBER}`);
+
+// -----------------------------------------------------------------------------
+// SERVIDOR LOCAL SIMPLES
+// -----------------------------------------------------------------------------
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
+  });
+
+  res.end("Bot Online");
+});
+
+server.listen(PORT, () => {
+  console.log(`🌐 Servidor local iniciado na porta ${PORT}`);
+});
+
+// -----------------------------------------------------------------------------
+// CONTROLES EM MEMÓRIA
+// -----------------------------------------------------------------------------
 
 const historico = {};
 const atendimentoHumano = {};
-const audiosEnviados = {};
-const SYSTEM_PROMPT = `Você é Wilamis Brasil, Diretor Comercial da Limpei Seu Nome. Um vendedor expert em WhatsApp: natural, direto e focado em fechar contrato.
 
-⚠️ COMPORTAMENTO:
-- Comece TODA primeira interação EXATAMENTE com esta frase: "Olá 🤗".
-- Escreva frases CURTAS e com QUEBRAS DE LINHA (estilo mensagem de áudio).
-- Seja humano. Se o cliente mandar áudio ou parecer confuso, simplifique e seja empático.
-- Sempre termine sua mensagem com uma pergunta para manter o controle da venda.
-- **REGRA DE OURO:** Você só pode passar para a próxima etapa se o cliente responder positivamente à pergunta da etapa anterior (ex: se ele disser "quero saber mais", "sim", "pode mandar").
-- Siga exatamento o fluxo de conversa abaixo, sem pular etapas.
-- Se o cliente responder que JÁ É CLIENTE, responda EXATAMENTE: "Entendi! Como você já é nosso cliente, vou encaminhar sua mensagem para o setor responsável verificar seu caso. Por favor, aguarde um instante." e NÃO SIGA O FLUXO DE VENDAS.
+// -----------------------------------------------------------------------------
+// PROMPT DO ATENDIMENTO
+// -----------------------------------------------------------------------------
 
-⚠️ REGRAS DE OURO (NÃO NEGOCIÁVEIS):
-- Use EXATAMENTE os textos fornecidos abaixo. Não resuma, não mude palavras e não pule etapas.
-- Você só pode avançar para a próxima etapa quando o cliente responder à pergunta final da etapa atual.
-- Escreva com as quebras de linha indicadas para parecer mensagem de WhatsApp.
+const SYSTEM_PROMPT = `Você é a Andreia Costa, especialista e vendedora do Método Ímãs Lucrativos e distribuidora oficial das Máquinas Americanas de fotoímãs. 
+Seu objetivo é conduzir a conversa de forma amigável, humanizada e focada em conversão, seguindo estritamente as diretrizes:
 
-🚀 SEU FLUXO DE CONVERSA (NÃO PULE ETAPAS):
-1. Saudação Inicial OBRIGATÓRIA: "Olá, tudo bem? Me fala rapidinho… você já é nosso cliente ou está entrando em contato agora?"
-2. Sendo novo, apresente-se como Meu nome é *Wilamis Brasil, sou Diretor Comercial da **Limpei Seu Nome* e eu mesmo serei responsável 
-pelo seu atendimento.
+- Nome do cliente: Use o nome do cliente assim que ele informar.
+- Tom de voz: Acolhedor, entusiasta, profissional e direto ("Oiiiiie Que bom te ver por aqui...").
+- Filosofia de vendas: Enfatize que o cliente NÃO precisa começar comprando a máquina americana. O mais importante é aprender a estruturar o negócio e vender no Método Ímãs Lucrativos.
 
-Somos especializados em *recuperação de crédito para CPF e CNPJ em todo o Brasil*, atuando por meio 
-de *medidas judiciais com pedido de liminar, com base no **Código de Defesa do Consumidor*.
+LINKS OFICIAIS (Use apenas quando apropriado no fluxo):
+- Curso Método Ímãs Lucrativos (R$197 ou 12x R$20,37 / Acesso Vitalício / 7 dias garantia): https://pay.kiwify.com.br/L2kL02v
+- Máquinas Americanas no Mercado Livre (Tamanhos 5x5cm, 6,3x6,3cm, 8x5,3cm, 9x6,5cm / Garantia 1 ano): https://bit.ly/4cbD23V
 
-Por meio desse processo, solicitamos a retirada das negativações nos principais birôs de crédito do país:
+REGRAS DE DÚVIDAS:
+1. Impressão/Papel/Gabarito: Informe com educação que esses conteúdos e gabaritos são exclusivos para alunos do curso.
+2. Rastreio de Máquina: Explique que a logística de entrega é 100% gerenciada pelo Mercado Livre no painel do comprador.`;
 
-✔ Serasa
-✔ SPC Brasil
-✔ Boa Vista
-✔ Quod
-✔ Cartórios
-quer saber mais sobre os benefícios?
-3. ✅ *BENEFÍCIOS DO NOSSO SERVIÇO*
-
-✔ Prazo médio de *7 a 15 dias*
-✔ *Garantia contratual de 12 meses*
-✔ Atendimento em todo o Brasil
-✔ Aumento gradativo do score
-✔ Retomada do credito no mercado financeiro
-Quer continuar e saber os valores?
-4.💳 * Valores e Formas de Pagamento*
-
-* *CPF:* R$ 799
-(Sinal de R$ 100 na assinatura do contrato)
-
-* *CNPJ:* R$ 999
-(Sinal de R$ 200 na assinatura do contrato)
-
-✔ PIX à vista com *10% de desconto*
-
-✔ Cartão de crédito em até *3x sem juros*
-
-✔ Boleto em até *2x sem juros* (sendo 50% após o nome limpo e o restante em 30 dias)
-
- Atenção
-Para contratação com condição de pagamento facilitado (pagar depois), é necessário:
-✔ Comprovação de renda da pessoa fisica ou faturamento da empresa.
-
-Abaixo vou te explicar quem somos, quer continuar?
-5. ## 👥 *QUEM SOMOS*
-
-Antes de contratar, recomendamos que você verifique todas as informações da empresa.
-
-📄 Leia nosso contrato:
-[https://limpeiseunome.com.br/contratos/Contrato_CPF_799_Sinal_100_2026.pdf](https://limpeiseunome.com.br/contratos/Contrato_CPF_799_Sinal_100_2026.pdf)
-
-Também recomendamos que pesquise nosso CNPJ e reputação nos órgãos de defesa do consumidor e no Reclame Aqui.
-
----
-
-🏢 *Empresa:* Smart Work Serviços Digitais LTDA
-📄 *CNPJ:* 56.944.533/0001-86
-
-🌐 *Nossas Redes Oficiais*
-
-📸 Instagram: @limpeiseunome
-▶️ YouTube: @limpeiseunome
-🎵 TikTok: @limpeiseunome
-🌍 Site: www.limpeiseunome.com.br
-Deseja seguir os proxímos passos para contratar e limpar seu nome?
-6. Para dar início e preparar seu contrato, basta enviar os seguintes dados:
-
-* Nome completo
-* CPF ou CNPJ
-* Endereço completo
-* Documento com foto (RG ou CNH)
-* Comprovante de renda (para pagamento via boleto ou análise)
-
-Após o envio, preparamos o contrato para assinatura e início do processo.
-7. Depois dele enviar os documentos, Encerre dizendo: "Perfeito... vou encaminhar seus dados pra análise e o especialista vai continuar com você. Só aguardar um pouco."
-
-🚫 LIMITES CRÍTICOS:
-- NUNCA prometa "causa ganha" ou "aprovamos seu crédito em banco".
-- FOCO ÚNICO: Retirada de negativações dos birôs.
-- NUNCA mencione termos como "etapa", "passo", "prompt" ou "funil" na conversa.
-- Se o cliente perguntar se é golpe, informe o CNPJ 56.944.533/0001-86.`;
-
-const ARQUIVO_CONTATOS = './contatos_atendidos.json';
+// -----------------------------------------------------------------------------
+// CONTROLE DE CONTATOS JÁ ATENDIDOS
+// -----------------------------------------------------------------------------
 
 function carregarAtendidos() {
-  if (!fs.existsSync(ARQUIVO_CONTATOS)) return [];
-  return JSON.parse(fs.readFileSync(ARQUIVO_CONTATOS, 'utf-8'));
+  try {
+    if (!fs.existsSync(ARQUIVO_CONTATOS)) {
+      return [];
+    }
+
+    const conteudo = fs.readFileSync(ARQUIVO_CONTATOS, "utf-8");
+
+    if (!conteudo.trim()) {
+      return [];
+    }
+
+    const atendidos = JSON.parse(conteudo);
+
+    return Array.isArray(atendidos) ? atendidos : [];
+  } catch (erro) {
+    console.error(
+      "⚠️ Não foi possível carregar contatos_atendidos.json:",
+      erro.message
+    );
+
+    return [];
+  }
 }
 
 function salvarNovoAtendido(jid) {
-  let atendidos = carregarAtendidos();
-  if (!atendidos.includes(jid)) {
-    atendidos.push(jid);
-    fs.writeFileSync(ARQUIVO_CONTATOS, JSON.stringify(atendidos));
+  try {
+    const atendidos = carregarAtendidos();
+
+    if (!atendidos.includes(jid)) {
+      atendidos.push(jid);
+
+      fs.writeFileSync(
+        ARQUIVO_CONTATOS,
+        JSON.stringify(atendidos, null, 2),
+        "utf-8"
+      );
+    }
+  } catch (erro) {
+    console.error(
+      "⚠️ Não foi possível salvar o contato atendido:",
+      erro.message
+    );
   }
 }
-async function iniciarBot() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
 
- // Buscando a versão mais recente do WhatsApp Web para evitar erro 405
+// -----------------------------------------------------------------------------
+// FUNÇÕES AUXILIARES
+// -----------------------------------------------------------------------------
+
+function obterTimestampMensagem(messageTimestamp) {
+  if (!messageTimestamp) {
+    return 0;
+  }
+
+  if (typeof messageTimestamp === "number") {
+    return messageTimestamp;
+  }
+
+  if (typeof messageTimestamp === "bigint") {
+    return Number(messageTimestamp);
+  }
+
+  if (typeof messageTimestamp?.toNumber === "function") {
+    return messageTimestamp.toNumber();
+  }
+
+  const convertido = Number(messageTimestamp);
+
+  return Number.isNaN(convertido) ? 0 : convertido;
+}
+
+function extrairTextoMensagem(msg) {
+  return (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    msg.message?.imageMessage?.caption ||
+    msg.message?.videoMessage?.caption ||
+    ""
+  );
+}
+
+function agendarReconexao() {
+  if (reconexaoAgendada) {
+    return;
+  }
+
+  reconexaoAgendada = true;
+
+  console.log("🔄 Tentando reconectar em 5 segundos...");
+
+  setTimeout(() => {
+    reconexaoAgendada = false;
+
+    iniciarBot().catch((erro) => {
+      console.error(
+        "❌ Falha durante a reconexão:",
+        erro.message
+      );
+    });
+  }, 5000);
+}
+
+// -----------------------------------------------------------------------------
+// INICIALIZAÇÃO DO WHATSAPP
+// -----------------------------------------------------------------------------
+
+async function iniciarBot() {
+  const { state, saveCreds } =
+    await useMultiFileAuthState(SESSION_PATH);
+
   const { version } = await fetchLatestBaileysVersion();
+
+  console.log(
+    `📦 Versão do WhatsApp Web utilizada: ${version.join(".")}`
+  );
 
   const sock = makeWASocket({
     auth: state,
-    version, // Força a versão estável
-    logger: pino({ level: 'silent' }),
+    version,
+
+    logger: pino({
+      level: "silent",
+    }),
+
     printQRInTerminal: false,
-    mobile: false, // Garante que não está tentando usar API de celular
-    browser: ['Mac OS', 'Chrome', '121.0.6167.85'],
-    syncFullHistory: false, // Não baixa histórico, foca na conexão
-    connectTimeoutMs: 60000, // Dá 1 minuto para o socket estabilizar
-    defaultQueryTimeoutMs: 0, 
+
+    mobile: false,
+
+    browser: [
+      "Ubuntu",
+      "Chrome",
+      "121.0.6167.85",
+    ],
+
+    syncFullHistory: false,
+
+    connectTimeoutMs: 60000,
+
+    defaultQueryTimeoutMs: 60000,
+
     keepAliveIntervalMs: 10000,
+
+    markOnlineOnConnect: false,
+
+    generateHighQualityLinkPreview: false,
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
+  // ---------------------------------------------------------------------------
+  // ATUALIZAÇÕES DA CONEXÃO
+  // ---------------------------------------------------------------------------
 
-    if (connection === 'close') {
-      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      console.log(`🔌 Conexão fechada. Motivo: ${reason}`);
-      
-      // Se der erro 405 ou 428, reconecta em 2 segundos (mais rápido)
-      const reconectarEm = (reason === 405 || reason === 428) ? 2000 : 5000;
-      setTimeout(() => iniciarBot(), reconectarEm);
+  sock.ev.on("connection.update", async (update) => {
+    const {
+      connection,
+      lastDisconnect,
+    } = update;
+
+    if (connection === "connecting") {
+      console.log("🔌 Conectando ao WhatsApp...");
     }
 
-    if (connection === 'open') {
-      console.log('🤖 BOT LIMPEI SEU NOME ONLINE');
+    if (connection === "open") {
+      console.log("");
+      console.log("🤖 BOT MÉTODOS ÍMÃS LUCRATIVOS ONLINE");
+      console.log("✅ WhatsApp conectado com sucesso.");
+      console.log("");
+
       pairingRequested = false;
+      reconexaoAgendada = false;
     }
 
-    if (!state.creds.registered && !pairingRequested) {
+    if (
+      !state.creds.registered &&
+      !pairingRequested
+    ) {
       pairingRequested = true;
-      const num = process.env.PHONE_NUMBER;
-      if (!num) {
-        console.log("❌ PHONE_NUMBER não configurado!");
-        return;
-      }
 
+      console.log("");
       console.log("⏳ Aguardando sinal do WhatsApp...");
+      console.log(
+        `📱 O código será gerado para: ${PHONE_NUMBER}`
+      );
 
       setTimeout(async () => {
         try {
-          // Só tenta se o socket ainda estiver conectado
-          console.log(`📡 Tentando gerar código para: ${num}`);
-          const code = await sock.requestPairingCode(num);
-          console.log(`\n************************************`);
-          console.log(`👉 SEU CÓDIGO: ${code}`);
-          console.log(`************************************\n`);
-        } catch (err) {
-          console.log("❌ Erro na requisição. O socket resetou. Tentando novamente...");
+          console.log("");
+          console.log(
+            `📡 Tentando gerar código para: ${PHONE_NUMBER}`
+          );
+
+          const code =
+            await sock.requestPairingCode(PHONE_NUMBER);
+
+          const codigoFormatado =
+            code?.match(/.{1,4}/g)?.join("-") || code;
+
+          console.log("");
+          console.log(
+            "************************************"
+          );
+          console.log(
+            `👉 SEU CÓDIGO: ${codigoFormatado}`
+          );
+          console.log(
+            "************************************"
+          );
+          console.log("");
+        } catch (erro) {
+          console.error(
+            "❌ Não foi possível gerar o código:",
+            erro.message
+          );
+
           pairingRequested = false;
         }
-      }, 15000); 
+      }, 5000);
+    }
+
+    if (connection === "close") {
+      pairingRequested = false;
+
+      const statusCode = new Boom(
+        lastDisconnect?.error
+      )?.output?.statusCode;
+
+      const foiDesconectado =
+        statusCode === DisconnectReason.loggedOut;
+
+      console.log(
+        `🔌 Conexão fechada. Motivo: ${statusCode || "desconhecido"}`
+      );
+
+      if (foiDesconectado) {
+        console.error("");
+        console.error(
+          "❌ O WhatsApp desconectou a sessão."
+        );
+        console.error(
+          "Apague a pasta sessao_local e execute novamente para gerar outro código."
+        );
+        console.error("");
+
+        return;
+      }
+
+      agendarReconexao();
     }
   });
 
- 
+  // ---------------------------------------------------------------------------
+  // RECEBIMENTO DE MENSAGENS
+  // ---------------------------------------------------------------------------
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg?.message) return;
-
-    const msgTime = msg.messageTimestamp;
-    const agoraRelogio = Math.floor(Date.now() / 1000);
-    if (agoraRelogio - msgTime > 30) return;
-
-    const jid = msg.key.remoteJid;
-    if (jid.endsWith('@g.us')) return; 
-
-    // -------------------------------------------------------------------------
-    // [PONTO 2] A TRAVA ANTI-CLIENTE ANTIGO (ADICIONADA AQUI)
-    // -------------------------------------------------------------------------
-    const jaAtendidos = carregarAtendidos();
-    if (jaAtendidos.includes(jid) && (!historico[jid] || historico[jid].length === 0)) {
-        console.log(`🚫 Pulando contato que já está na base de dados: ${jid}`);
-        return;
-    }
-
-    // --- LOGICA DE MENSAGEM (TEXTO OU AUDIO) ---
-    let texto = "";
-    if (msg.message.conversation || msg.message.extendedTextMessage?.text) {
-      texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    } 
-    else if (msg.message.audioMessage) {
-      console.log("🎤 Áudio detectado de " + jid);
-      const tempFile = `./${jid.replace(/[^0-9]/g, '')}_${Date.now()}.ogg`;
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    for (const msg of messages) {
       try {
-        const buffer = await downloadMediaMessage(msg, 'buffer', {});
-        fs.writeFileSync(tempFile, buffer);
-        const transcription = await groq.audio.transcriptions.create({
-          file: fs.createReadStream(tempFile),
-          model: "whisper-large-v3",
+        if (!msg?.message) {
+          continue;
+        }
+
+        const jid = msg.key.remoteJid;
+
+        if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast") {
+          continue;
+        }
+
+        const timestampMensagem = obterTimestampMensagem(msg.messageTimestamp);
+        const agoraRelogio = Math.floor(Date.now() / 1000);
+
+        if (timestampMensagem && agoraRelogio - timestampMensagem > 30) {
+          continue;
+        }
+
+        const texto = extrairTextoMensagem(msg);
+
+        // COMANDOS MANUAIS ENVIADOS PELO PRÓPRIO DONO
+        if (msg.key.fromMe) {
+          const textoLower = texto.toLowerCase().trim();
+
+          if (textoLower === PALAVRA_PAUSA) {
+            atendimentoHumano[jid] = true;
+            console.log(`🛑 Bot pausado manualmente para ${jid}`);
+          }
+
+          if (textoLower === PALAVRA_VOLTAR) {
+            delete atendimentoHumano[jid];
+            console.log(`✅ Bot reativado para ${jid}`);
+          }
+
+          continue;
+        }
+
+        if (!texto?.trim()) {
+          continue;
+        }
+
+        console.log(`💬 Mensagem recebida de ${jid}: ${texto}`);
+
+        // NÃO RESPONDE QUANDO O HUMANO ASSUMIU
+        if (atendimentoHumano[jid]) {
+          console.log(`👤 Atendimento humano ativo para ${jid}. Bot não respondeu.`);
+          continue;
+        }
+
+        if (!historico[jid]) {
+          historico[jid] = [];
+        }
+
+        // TRAVA PARA CONTATOS JÁ ATENDIDOS EM EXECUÇÕES ANTERIORES
+        const jaAtendidos = carregarAtendidos();
+        if (jaAtendidos.includes(jid) && historico[jid].length === 0) {
+          console.log(`🚫 Pulando contato que já está na base de dados: ${jid}`);
+          continue;
+        }
+
+        // TRAVA PARA CONVERSAS MUITO LONGAS
+        if (historico[jid].length > 15) {
+          console.log(`⏭️ Conversa longa detectada para ${jid}. Bot em silêncio.`);
+          continue;
+        }
+
+        historico[jid].push({
+          role: "user",
+          content: texto.trim(),
         });
-        texto = transcription.text;
-      } catch (err) {
-        console.error("❌ Erro áudio:", err);
-      } finally {
-        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-      }
-    }
 
-    // --- CONTROLE MANUAL (#pausar / #voltar) ---
-    if (msg.key.fromMe) {
-      const textoLower = texto.toLowerCase().trim();
-      if (textoLower === PALAVRA_PAUSA) {
-        atendimentoHumano[jid] = true; // Pausa infinita até dar #voltar
-        console.log(`🛑 Bot pausado manualmente para ${jid}`);
-      }
-      if (textoLower === PALAVRA_VOLTAR) {
-        delete atendimentoHumano[jid];
-        console.log(`✅ Bot reativado para ${jid}`);
-      }
-      return;
-    }
-
-    // --- 🛡️ TRAVA 1: SE O HUMANO ASSUMIU OU ESTÁ PAUSADO ---
-    if (atendimentoHumano[jid]) return;
-
-    if (!texto) return;
-
-    if (!historico[jid]) historico[jid] = [];
-    
-    // --- 🛡️ TRAVA 2: NÃO RESPONDER CLIENTES ANTIGOS ---
-    // Se o bot nunca falou com ele e já tem mensagens no chat, ou se o histórico do bot passou de 15 mensagens
-    if (historico[jid].length > 15) {
-        console.log(`⏭️ Cliente antigo ou conversa longa detectada (${jid}). Bot em silêncio.`);
-        return;
-    }
-
-    historico[jid].push({ role: 'user', content: texto });
-
-    try {
-      const agoraBahia = new Date().toLocaleString("pt-BR", {timeZone: "America/Bahia"});
-// --- histórico da conversa ---
-      const resposta = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.` },
-          ...historico[jid].slice(-5) 
-        ],
-        max_tokens: 400 
-      });
-
-      const textoFinal = resposta.choices[0].message.content;
-
-   
-
-      // -------------------------------------------------------------------------
-      // [PONTO 3] SALVAR O CONTATO (ADICIONADA AQUI)
-      // -------------------------------------------------------------------------
-      salvarNovoAtendido(jid);
-           // --- GATILHOS DE AUDIO E IMAGEM ---//
-     // --- LÓGICA DE ENVIO ORGANIZADA POR ETAPA (COM TRAVAS E LOGS) ---
-
-    // 🎤 ETAPA 1: SAUDAÇÃO (Áudio de Entrada primeiro)
-    if (textoFinal.includes("Olá 🤗") && !audiosEnviados[jid]?.entrada) {
-        await sock.sendMessage(jid, { audio: { url: "./audio/audiodeentrada.ogg" }, mimetype: 'audio/ogg; codecs=opus', ptt: true });
-        await delay(4000); 
-        await sock.sendMessage(jid, { text: textoFinal });
-        
-        if (!audiosEnviados[jid]) audiosEnviados[jid] = {};
-        audiosEnviados[jid].entrada = true; // TRAVA DE SEGURANÇA
-        console.log(`🎤 Áudio audiodeentrada.ogg enviado com sucesso para ${jid}`);
-    }
-
-    // 🎤 ETAPA 2: APRESENTAÇÃO (Audio 1 primeiro)
-    else if (textoFinal.includes("Wilamis Brasil") && !audiosEnviados[jid]?.apresentacao) {
-        await sock.sendMessage(jid, { audio: { url: "./audio/audio1.ogg" }, mimetype: 'audio/ogg; codecs=opus', ptt: true });
-        await delay(5000); 
-        await sock.sendMessage(jid, { text: textoFinal });
-        
-        if (!audiosEnviados[jid]) audiosEnviados[jid] = {};
-        audiosEnviados[jid].apresentacao = true; // TRAVA DE SEGURANÇA
-        console.log(`🎤 Áudio audio1.ogg enviado com sucesso para ${jid}`);
-    }
-
-    // ✉️ TODAS AS OUTRAS ETAPAS (Delay de digitação normal)
-    else {
-        await sock.sendPresenceUpdate('composing', jid);
-        await delay(tempoAleatorio(10, 15)); 
-        await sock.sendMessage(jid, { text: textoFinal });
-    }
-
-    // 🖼️ GATILHO DE IMAGEM
-    if (textoFinal.includes("me manda esses dados") || textoFinal.includes("preparo seu contrato")) {
-        await delay(4000);
-        await sock.sendMessage(jid, { 
-            image: { url: "./img/divulgacao.png" }, 
-            caption: `Confira os benefícios que você terá ao limpar seu nome conosco!`
+        // RESPOSTA DA GROQ
+        const agoraBahia = new Date().toLocaleString("pt-BR", {
+          timeZone: "America/Bahia",
         });
-    }
 
-      historico[jid].push({ role: 'assistant', content: textoFinal });
+        console.log(`⚡ Enviando conversa para a Groq: ${jid}`);
 
-      // --- 🛡️ TRAVA 3: AUTO-ENCERRAMENTO (ETAPAS 6, 7 OU CLIENTE ANTIGO) ---
-      const textoBaixo = textoFinal.toLowerCase();
-      
-      const gatilhosParar = [
-        "enviar os seguintes dados",    // Trava na Etapa 6
-        "preparar seu contrato",       // Trava na Etapa 6
-        "aguardar um pouco",           // Trava na Etapa 7
-        "especialista vai continuar",  // Trava na Etapa 7
-        "encaminhar seus dados",       // Trava na Etapa 7
-        
-        // TRAVA DE CLIENTE ANTIGO (Baseada na frase que o BOT diz)
-        "setor responsável verificar", // O Bot só diz isso se o cara for cliente
-        "aguarde um instante"          // O Bot só diz isso se o cara for cliente
-      ];
+const resposta = await groq.chat.completions.create({
+  model: "openai/gpt-oss-120b",
+  messages: [
+    {
+      role: "system",
+      content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.`,
+    },
+    ...historico[jid].slice(-10),
+  ],
+  max_tokens: 400,
+  temperature: 0.2,
+});
+        const textoFinal = resposta.choices?.[0]?.message?.content?.trim();
 
-      const deveParar = gatilhosParar.some(palavra => textoBaixo.includes(palavra));
+        if (!textoFinal) {
+          console.error(`❌ A Groq não retornou texto para ${jid}.`);
+          continue;
+        }
 
-      if (deveParar) {
-        atendimentoHumano[jid] = true; 
-        console.log(`🏁 Bot finalizou o fluxo para ${jid}. Humano assume agora.`);
+        console.log(`🤖 Resposta gerada para ${jid}: ${textoFinal}`);
+
+        salvarNovoAtendido(jid);
+
+        // EFEITO DIGITANDO E ENVIO DA MENSAGEM DE TEXTO
+        await sock.sendPresenceUpdate("composing", jid);
+        await delay(tempoAleatorio(3, 6));
+
+        await sock.sendMessage(jid, {
+          text: textoFinal,
+        });
+
+        // SALVA A RESPOSTA NO HISTÓRICO
+        historico[jid].push({
+          role: "assistant",
+          content: textoFinal,
+        });
+
+      } catch (erro) {
+        console.error("❌ Erro ao processar mensagem:", erro.message);
       }
-
-    } catch (err) {
-      console.error('❌ Erro Groq:', err.message);
     }
   });
+
+  return sock;
 }
 
+// -----------------------------------------------------------------------------
+// INICIA O BOT
+// -----------------------------------------------------------------------------
+
 console.log("🏁 Chamando a função iniciarBot...");
-iniciarBot().catch(err => {
-    console.error("❌ FALHA CRÍTICA NO INÍCIO:", err);
+
+iniciarBot().catch((erro) => {
+  console.error("❌ FALHA CRÍTICA NO INÍCIO:", erro);
 });
 
+// -----------------------------------------------------------------------------
+// TRATAMENTO DE ERROS GERAIS
+// -----------------------------------------------------------------------------
 
+process.on("unhandledRejection", (erro) => {
+  console.error("❌ Erro assíncrono não tratado:", erro);
+});
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+process.on("uncaughtException", (erro) => {
+  console.error("❌ Erro não tratado:", erro);
+});
