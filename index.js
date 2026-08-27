@@ -121,7 +121,7 @@ const historico = {};
 const atendimentoHumano = {};
 
 // -----------------------------------------------------------------------------
-// PROMPT ATENDIMENTO
+// PROMPT DE ATENDIMENTO
 // -----------------------------------------------------------------------------
 
 const SYSTEM_PROMPT = `Você é a Andreia Costa, especialista e vendedora do Método Ímãs Lucrativos e distribuidora oficial das Máquinas Americanas de fotoímãs.
