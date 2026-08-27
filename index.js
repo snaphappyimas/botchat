@@ -454,13 +454,7 @@ async function iniciarBot() {
           historico[jid] = [];
         }
 
-        // TRAVA PARA CONTATOS JÁ ATENDIDOS EM EXECUÇÕES ANTERIORES
-        const jaAtendidos = carregarAtendidos();
-        if (jaAtendidos.includes(jid) && historico[jid].length === 0) {
-          console.log(`🚫 Pulando contato que já está na base de dados: ${jid}`);
-          continue;
-        }
-
+     
         // TRAVA PARA CONVERSAS MUITO LONGAS
         if (historico[jid].length > 15) {
           console.log(`⏭️ Conversa longa detectada para ${jid}. Bot em silêncio.`);
