@@ -474,7 +474,7 @@ async function iniciarBot() {
         console.log(`⚡ Enviando conversa para a Groq: ${jid}`);
 
 const resposta = await groq.chat.completions.create({
-  model: "openai/gpt-oss-120b",
+  model: "llama-3.3-70b-versatile",
   messages: [
     {
       role: "system",
