@@ -33,7 +33,7 @@ const PALAVRA_PAUSA = "#certo";
 const PALAVRA_VOLTAR = "#se tiver dúvidas, me chama";
 
 // Sessão salva dentro da pasta do projeto.
-const SESSION_PATH = path.join(__dirname, "auth_info_baileys");
+const SESSION_PATH = path.join(__dirname, "sessao_local");
 
 // Arquivo dos contatos atendidos salvo dentro da pasta do projeto.
 const ARQUIVO_CONTATOS = path.join(
@@ -121,9 +121,8 @@ const historico = {};
 const atendimentoHumano = {};
 
 // -----------------------------------------------------------------------------
-// PROMPT DE ATENDIMENTO
+// PROMPT DO ATENDIMENTO
 // -----------------------------------------------------------------------------
-
 const SYSTEM_PROMPT = `Você é a Andreia Costa, especialista e vendedora do Método Ímãs Lucrativos e distribuidora oficial das Máquinas Americanas de fotoímãs.
 Seu objetivo é conduzir a conversa de forma amigável, humanizada e focada em conversão, seguindo rigorosamente o fluxo de conversa e as diretrizes abaixo:
 
@@ -348,23 +347,43 @@ function agendarReconexao() {
 // -----------------------------------------------------------------------------
 
 async function iniciarBot() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
+  const { state, saveCreds } =
+    await useMultiFileAuthState(SESSION_PATH);
+
   const { version } = await fetchLatestBaileysVersion();
 
-  console.log(`📦 Versão do WhatsApp Web utilizada: ${version.join(".")}`);
+  console.log(
+    `📦 Versão do WhatsApp Web utilizada: ${version.join(".")}`
+  );
 
   const sock = makeWASocket({
     auth: state,
     version,
-    logger: pino({ level: "silent" }),
+
+    logger: pino({
+      level: "silent",
+    }),
+
     printQRInTerminal: false,
+
     mobile: false,
-    browser: ["Ubuntu", "Chrome", "120.0.6099.199"],
+
+    browser: [
+      "Ubuntu",
+      "Chrome",
+      "121.0.6167.85",
+    ],
+
     syncFullHistory: false,
+
     connectTimeoutMs: 60000,
+
     defaultQueryTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
+
+    keepAliveIntervalMs: 10000,
+
     markOnlineOnConnect: false,
+
     generateHighQualityLinkPreview: false,
   });
 
@@ -375,7 +394,10 @@ async function iniciarBot() {
   // ---------------------------------------------------------------------------
 
   sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update;
+    const {
+      connection,
+      lastDisconnect,
+    } = update;
 
     if (connection === "connecting") {
       console.log("🔌 Conectando ao WhatsApp...");
@@ -391,57 +413,76 @@ async function iniciarBot() {
       reconexaoAgendada = false;
     }
 
-    // Solicita o código apenas se NÃO estiver registrado
-    if (!sock.authState.creds.registered && !pairingRequested) {
+    if (
+      !state.creds.registered &&
+      !pairingRequested
+    ) {
       pairingRequested = true;
 
       console.log("");
-      console.log("⏳ Aguardando estabilização para gerar o código de pareamento...");
+      console.log("⏳ Aguardando sinal do WhatsApp...");
+      console.log(
+        `📱 O código será gerado para: ${PHONE_NUMBER}`
+      );
 
       setTimeout(async () => {
-        // Se a conexão fechar durante o tempo de espera, aborta a chamada
-        if (sock.ws.readyState !== sock.ws.OPEN) {
-          console.log("⚠️ Conexão ainda não está pronta para gerar o código. Tentando novamente na reconexão...");
-          pairingRequested = false;
-          return;
-        }
-
         try {
-          console.log(`📡 Solicitando código para: ${PHONE_NUMBER}`);
+          console.log("");
+          console.log(
+            `📡 Tentando gerar código para: ${PHONE_NUMBER}`
+          );
 
-          const code = await sock.requestPairingCode(PHONE_NUMBER);
-          const codigoFormatado = code?.match(/.{1,4}/g)?.join("-") || code;
+          const code =
+            await sock.requestPairingCode(PHONE_NUMBER);
+
+          const codigoFormatado =
+            code?.match(/.{1,4}/g)?.join("-") || code;
 
           console.log("");
-          console.log("************************************");
-          console.log(`👉 SEU CÓDIGO: ${codigoFormatado}`);
-          console.log("************************************");
+          console.log(
+            "************************************"
+          );
+          console.log(
+            `👉 SEU CÓDIGO: ${codigoFormatado}`
+          );
+          console.log(
+            "************************************"
+          );
           console.log("");
         } catch (erro) {
-          console.error("❌ Erro ao gerar o código:", erro.message);
+          console.error(
+            "❌ Não foi possível gerar o código:",
+            erro.message
+          );
+
           pairingRequested = false;
         }
-      }, 10000); // 10 segundos para o WebSocket firmar no servidor do WhatsApp
+      }, 5000);
     }
 
     if (connection === "close") {
       pairingRequested = false;
 
-      const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      const foiDesconectado = statusCode === DisconnectReason.loggedOut;
+      const statusCode = new Boom(
+        lastDisconnect?.error
+      )?.output?.statusCode;
 
-      console.log(`🔌 Conexão fechada. Motivo: ${statusCode || "desconhecido"}`);
+      const foiDesconectado =
+        statusCode === DisconnectReason.loggedOut;
 
-      if (foiDesconectado || statusCode === 401) {
+      console.log(
+        `🔌 Conexão fechada. Motivo: ${statusCode || "desconhecido"}`
+      );
+
+      if (foiDesconectado) {
         console.error("");
-        console.error("❌ Sessão inválida/desconectada (Erro 401).");
-        console.error("Limpe o Volume do Railway para permitir um novo código.");
+        console.error(
+          "❌ O WhatsApp desconectou a sessão."
+        );
+        console.error(
+          "Apague a pasta sessao_local e execute novamente para gerar outro código."
+        );
         console.error("");
-
-        // Limpa os arquivos da pasta localmente para a próxima tentativa
-        try {
-          fs.rmSync(SESSION_PATH, { recursive: true, force: true });
-        } catch (e) {}
 
         return;
       }
@@ -509,6 +550,8 @@ async function iniciarBot() {
           historico[jid] = [];
         }
 
+       
+
         // TRAVA PARA CONVERSAS MUITO LONGAS
         if (historico[jid].length > 15) {
           console.log(`⏭️ Conversa longa detectada para ${jid}. Bot em silêncio.`);
@@ -527,19 +570,18 @@ async function iniciarBot() {
 
         console.log(`⚡ Enviando conversa para a Groq: ${jid}`);
 
-     const resposta = await groq.chat.completions.create({
-  model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-          messages: [
-            {
-              role: "system",
-              content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.`,
-            },
-            ...historico[jid].slice(-10),
-          ],
-          max_tokens: 400,
-          temperature: 0.2,
-        });
-
+const resposta = await groq.chat.completions.create({
+  model: "openai/gpt-oss-120b",
+  messages: [
+    {
+      role: "system",
+      content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.`,
+    },
+    ...historico[jid].slice(-10),
+  ],
+  max_tokens: 400,
+  temperature: 0.2,
+});
         const textoFinal = resposta.choices?.[0]?.message?.content?.trim();
 
         if (!textoFinal) {
