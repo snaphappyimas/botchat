@@ -33,7 +33,7 @@ const PALAVRA_PAUSA = "#certo";
 const PALAVRA_VOLTAR = "#se tiver dúvidas, me chama";
 
 // Sessão salva dentro da pasta do projeto.
-const SESSION_PATH = path.join(__dirname, "sessao_local");
+const SESSION_PATH = path.join(__dirname, "auth_info_baileys");
 
 // Arquivo dos contatos atendidos salvo dentro da pasta do projeto.
 const ARQUIVO_CONTATOS = path.join(
@@ -481,7 +481,7 @@ async function iniciarBot() {
           "❌ O WhatsApp desconectou a sessão."
         );
         console.error(
-          "Apague a pasta sessao_local e execute novamente para gerar outro código."
+          "Apague a pasta auth_info_baileys e execute novamente para gerar outro código."
         );
         console.error("");
 
