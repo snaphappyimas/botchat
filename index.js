@@ -29,7 +29,8 @@ function tempoAleatorio(min, max) {
 
 const PORT = process.env.PORT || 8080;
 
-const PALAVRA_PAUSA = "Vamos te transferir para o atendimento humano, Letícia irá te responder em breve";
+// Frases em minúsculo para busca insensível a maiúsculas/minúsculas no .includes()
+const PALAVRA_PAUSA = "vamos te transferir para o atendimento humano, letícia irá te responder em breve";
 const PALAVRA_VOLTAR = "se tiver dúvidas, me chama";
 
 // Sessão salva dentro da pasta do projeto.
@@ -77,7 +78,7 @@ if (!PHONE_NUMBER) {
 }
 
 // -----------------------------------------------------------------------------
-// CRIA  PASTA LOCAL DA SESSÃO
+// CRIA PASTA LOCAL DA SESSÃO
 // -----------------------------------------------------------------------------
 
 if (!fs.existsSync(SESSION_PATH)) {
@@ -460,25 +461,27 @@ async function iniciarBot() {
         }
 
         const texto = extrairTextoMensagem(msg);
+        if (!texto?.trim()) {
+          continue;
+        }
 
-        // COMANDOS MANUAIS ENVIADOS PELO PRÓPRIO DONO
-        if (msg.key.fromMe) {
-          const textoLower = texto.toLowerCase().trim();
+        const textoLower = texto.toLowerCase().trim();
 
-          if (textoLower === PALAVRA_PAUSA) {
+        // CONTROLE MANUAL DE PAUSA E VOLTA DA IA
+        const eComandoPausa = textoLower.includes(PALAVRA_PAUSA.toLowerCase());
+        const eComandoVoltar = textoLower.includes(PALAVRA_VOLTAR.toLowerCase());
+
+        if (msg.key.fromMe || eComandoPausa || eComandoVoltar) {
+          if (eComandoPausa) {
             atendimentoHumano[jid] = true;
             console.log(`🛑 Bot pausado manualmente para ${jid}`);
           }
 
-          if (textoLower === PALAVRA_VOLTAR) {
+          if (eComandoVoltar) {
             delete atendimentoHumano[jid];
             console.log(`✅ Bot reativado para ${jid}`);
           }
 
-          continue;
-        }
-
-        if (!texto?.trim()) {
           continue;
         }
 
@@ -494,14 +497,6 @@ async function iniciarBot() {
           historico[jid] = [];
         }
 
-       
-
-        // TRAVA PARA CONVERSAS MUITO LONGAS
-        if (historico[jid].length > 15) {
-          console.log(`⏭️ Conversa longa detectada para ${jid}. Bot em silêncio.`);
-          continue;
-        }
-
         historico[jid].push({
           role: "user",
           content: texto.trim(),
@@ -514,18 +509,19 @@ async function iniciarBot() {
 
         console.log(`⚡ Enviando conversa para a Groq: ${jid}`);
 
-const resposta = await groq.chat.completions.create({
-  model: "openai/gpt-oss-120b",
-  messages: [
-    {
-      role: "system",
-      content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.`,
-    },
-    ...historico[jid].slice(-10),
-  ],
-  max_tokens: 250,
-  temperature: 0.3,
-});
+        const resposta = await groq.chat.completions.create({
+          model: "openai/gpt-oss-120b",
+          messages: [
+            {
+              role: "system",
+              content: `${SYSTEM_PROMPT}\n\nCONTEXTO: Hoje é ${agoraBahia}.`,
+            },
+            ...historico[jid].slice(-10),
+          ],
+          max_tokens: 250,
+          temperature: 0.3,
+        });
+
         const textoFinal = resposta.choices?.[0]?.message?.content?.trim();
 
         if (!textoFinal) {
