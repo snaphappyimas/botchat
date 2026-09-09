@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
+console.log("ARQUIVOS NA PASTA:", fs.readdirSync(__dirname));
 const faqContent = fs.readFileSync(path.join(__dirname, "faq.md"), "utf-8");
 const http = require("http");
 
