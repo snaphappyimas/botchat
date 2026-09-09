@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
+const faqContent = fs.readFileSync(path.join(__dirname, "faq.md"), "utf-8");
 const http = require("http");
 
 const {
@@ -179,7 +180,8 @@ A ideia é você sair sabendo transformar fotoímãs em uma fonte de renda ✨. 
 Vou te enviar o link para fazer sua inscrição no Método Ímãs Lucrativos:
 https://pay.kiwify.com.br/L2kL02v
 
-Assim que o pagamento for confirmado, você recebe o acesso imediato!"`;
+Assim que o pagamento for confirmado, você recebe o acesso imediato!"
+${faqContent}`;
 
 // -----------------------------------------------------------------------------
 // CONTROLE DE CONTATOS JÁ ATENDIDOS
