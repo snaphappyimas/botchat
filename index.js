@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 console.log("ARQUIVOS NA PASTA:", fs.readdirSync(__dirname));
 const faqContent = fs.readFileSync(path.join(__dirname, "faq.md"), "utf-8");
+const fluxoVendas = fs.readFileSync(path.join(__dirname, "fluxo_vendas.md"), "utf-8");
 const http = require("http");
 
 const {
@@ -133,7 +134,7 @@ REGRAS OBRIGATÓRIAS DE FORMATAÇÃO:
 2. USE EMOJIS em todas as mensagens para manter o tom leve, amigável e acolhedor (😊, ✨, 🇺🇸, 📦, 💡, ❤️).
 3. Pergunte o nome no primeiro contato e use o nome do cliente em quase todas as mensagens.
 4. TODA resposta, sem exceção, deve terminar com uma pergunta curta que mantenha a conversa ativa (ex: "Quer saber como, [Nome]?", "Posso te ajudar com mais alguma coisa?"). Nunca finalize uma mensagem sem perguntar algo.
-5. 5. NUNCA informe valores das máquinas, faixas de preço ou promoções das máquinas, mesmo que o cliente pergunte diretamente ou insista. Preços mudam com frequência e só devem ser vistos no link oficial.
+5. NUNCA informe valores das máquinas, faixas de preço ou promoções das máquinas, mesmo que o cliente pergunte diretamente ou insista. Preços mudam com frequência e só devem ser vistos no link oficial.
 
 ---
 
@@ -182,7 +183,8 @@ Vou te enviar o link para fazer sua inscrição no Método Ímãs Lucrativos:
 https://pay.kiwify.com.br/L2kL02v
 
 Assim que o pagamento for confirmado, você recebe o acesso imediato!"
-${faqContent}`;
+${faqContent}
+${fluxoVendas}`;
 
 // -----------------------------------------------------------------------------
 // CONTROLE DE CONTATOS JÁ ATENDIDOS
